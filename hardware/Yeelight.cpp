@@ -4,7 +4,6 @@
 #include "../main/Helper.h"
 #include "../main/HTMLSanitizer.h"
 #include "../main/SQLHelper.h"
-#include "../main/localtime_r.h"
 #include "../hardware/hardwaretypes.h"
 #include "../main/mainworker.h"
 #include "../main/WebServer.h"
@@ -160,7 +159,7 @@ void Yeelight::InsertUpdateSwitch(const std::string &nodeID, const std::string &
 		ycmd.command = cmd;
 		// TODO: Update color
 		m_mainworker.PushAndWaitRxMessage(this, (const unsigned char *)&ycmd, nullptr, -1, m_Name.c_str());
-		m_sql.safe_query("UPDATE DeviceStatus SET Name='%q', SwitchType=%d, LastLevel=%d WHERE(HardwareID == %d) AND (DeviceID == '%q')", lightName.c_str(), (STYPE_Dimmer), value, m_HwdID, szDeviceID);
+		m_sql.safe_query("UPDATE DeviceStatus SET Name='%q', SwitchType=%d, LastLevel=%d WHERE (HardwareID == %d) AND (DeviceID == '%q')", lightName.c_str(), (STYPE_Dimmer), value, m_HwdID, szDeviceID);
 	}
 	else {
 		// Make sure subtype is correct
@@ -232,7 +231,7 @@ bool Yeelight::WriteToHardware(const char *pdata, const unsigned char length)
 		boost::asio::ip::tcp::socket sendSocket(io_service);
 		boost::asio::ip::tcp::resolver resolver(io_service);
 		boost::asio::ip::tcp::resolver::query query(boost::asio::ip::tcp::v4(), szTmp, "55443");
-		boost::asio::ip::tcp::resolver::iterator iterator = resolver.resolve(query);
+		auto iterator = resolver.resolve(query);
 		boost::asio::connect(sendSocket, iterator);
 
 		std::string message;

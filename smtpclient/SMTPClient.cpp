@@ -5,7 +5,6 @@
 #include <string.h>
 
 #include "../main/Logger.h"
-#include "../main/localtime_r.h"
 #include "../webserver/Base64.h"
 
 // Part of the Message Construction is taken from jwSMTP library
@@ -17,6 +16,8 @@ struct smtp_upload_status {
 	char* pDataBytes;
 	size_t sDataLength;
 };
+
+#define MAX_ATTACHMENT_ROW_SIZE 72
 
 static size_t smtp_payload_reader(void* ptr, size_t size, size_t nmemb, void* userp)
 {
@@ -84,12 +85,20 @@ void SMTPClient::AddAttachment(const std::string& adata, const std::string& atyp
 void SMTPClient::SetPlainBody(const std::string& body)
 {
 	m_PlainBody = body;
+
+	stdreplace(m_PlainBody, "\r\n", "\n");
+	stdreplace(m_PlainBody, "\n", "\r\n");
+
 	m_HTMLBody = "";
 }
 
 void SMTPClient::SetHTMLBody(const std::string& body)
 {
 	m_HTMLBody = body;
+
+	stdreplace(m_HTMLBody, "\r\n", "\n");
+	stdreplace(m_HTMLBody, "\n", "\r\n");
+
 	m_PlainBody = "";
 }
 
@@ -333,7 +342,7 @@ std::string SMTPClient::MakeMessage()
 					ret += "Content-Type: image/gif;\r\n";
 				}
 				else if (typ == ".jpg" || typ == "jpeg") { // j-peg format presumably
-					ret += "Content-Type: image/jpg;\r\n";
+					ret += "Content-Type: image/jpeg;\r\n";
 				}
 				else if (typ == ".txt") { // text format presumably
 					ret += "Content-Type: plain/txt;\r\n";
@@ -365,8 +374,13 @@ std::string SMTPClient::MakeMessage()
 			ret += "Content-Transfer-Encoding: base64\r\n";
 			ret += "Content-Disposition: attachment;\r\n filename=\"" + a.second + "\"\r\n\r\n";
 
-			ret.insert(ret.end(), a.first.begin(), a.first.end());
-			ret += "\r\n";
+			size_t nbRows = a.first.size() / MAX_ATTACHMENT_ROW_SIZE + 1;
+			for (size_t i = 0; i <= nbRows - 1; i++)
+			{
+				std::string sub_encoded_buf = a.first.substr(i * MAX_ATTACHMENT_ROW_SIZE, MAX_ATTACHMENT_ROW_SIZE);
+				sub_encoded_buf += "\r\n";
+				ret.insert(ret.end(), sub_encoded_buf.begin(), sub_encoded_buf.end());
+			}
 		}
 		ret += "--" + std::string(szBoundaryMixed) + "--\r\n";
 	}

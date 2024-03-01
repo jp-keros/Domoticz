@@ -1,7 +1,6 @@
 #include "stdafx.h"
 #include "mainworker.h"
 #include "SQLHelper.h"
-#include "localtime_r.h"
 #include "../hardware/hardwaretypes.h"
 #include "../main/Logger.h"
 #include "../main/RFXNames.h"
@@ -87,42 +86,50 @@ void CdzVents::ProcessNotificationItem(CLuaTable &luaTable, int &index, const CE
 	type = m_mainworker.m_notificationsystem.GetTypeString(item.nValue);
 	status = m_mainworker.m_notificationsystem.GetStatusString(item.lastLevel);
 
-	if (item.sValue.empty())
-		luaTable.AddString("message", "");
-	else
+	try
 	{
-		luaTable.AddString("message", "");
-		luaTable.OpenSubTableEntry("data", 0, 0);
-		if (item.nValue >= Notification::HW_TIMEOUT && item.nValue <= Notification::HW_THREAD_ENDED)
+		if (item.sValue.empty())
+			luaTable.AddString("message", "");
+		else
 		{
-			Json::Value eventdata;
-			if (ParseJSon(item.sValue, eventdata))
+			luaTable.AddString("message", "");
+			luaTable.OpenSubTableEntry("data", 0, 0);
+			if (item.nValue >= Notification::HW_TIMEOUT && item.nValue <= Notification::HW_THREAD_ENDED)
 			{
-				luaTable.AddInteger("id", eventdata["m_HwdID"].asInt());
-				luaTable.AddString("name", eventdata["m_Name"].asString());
+				Json::Value eventdata;
+				if (ParseJSon(item.sValue, eventdata))
+				{
+					luaTable.AddInteger("id", eventdata["m_HwdID"].asInt());
+					luaTable.AddString("name", eventdata["m_Name"].asString());
+				}
 			}
-		}
-		else if (item.nValue == Notification::DZ_BACKUP_DONE)
-		{
-			Json::Value eventdata;
-			if(ParseJSon(item.sValue, eventdata))
+			else if (item.nValue == Notification::DZ_BACKUP_DONE)
 			{
-				type = type + eventdata["type"].asString();
-				luaTable.AddNumber("duration", eventdata["duration"].asFloat());
-				luaTable.AddString("location", eventdata["location"].asString());
+				Json::Value eventdata;
+				if (ParseJSon(item.sValue, eventdata))
+				{
+					type = type + eventdata["type"].asString();
+					luaTable.AddNumber("duration", eventdata["duration"].asFloat());
+					luaTable.AddString("location", eventdata["location"].asString());
+				}
 			}
-		}
-		else if (item.nValue == Notification::DZ_CUSTOM)
-		{
-			Json::Value eventdata;
-			if (ParseJSon(item.sValue, eventdata))
+			else if (item.nValue == Notification::DZ_CUSTOM)
 			{
-				luaTable.AddString("name", eventdata["name"].asString());
-				luaTable.AddString("data", eventdata["data"].asString());
+				Json::Value eventdata;
+				if (ParseJSon(item.sValue, eventdata))
+				{
+					luaTable.AddString("name", eventdata["name"].asString());
+					luaTable.AddString("data", eventdata["data"].asString());
+				}
 			}
+			luaTable.CloseSubTableEntry();
 		}
-		luaTable.CloseSubTableEntry();
 	}
+	catch (const std::exception& e)
+	{
+		_log.Log(LOG_ERROR, "dzVents: Error in ProcessNotificationItem: %s", e.what());
+	}
+
 	luaTable.AddString("type", type);
 	luaTable.AddString("status", status);
 	luaTable.CloseSubTableEntry();
@@ -395,16 +402,46 @@ bool CdzVents::OpenURL(lua_State *lua_state, const std::vector<_tLuaTableValues>
 	}
 
 	// Handle situation where WebLocalNetworks is not open without password for dzVents
-	if (URL.find("127.0.0") != std::string::npos || URL.find("::") != std::string::npos || URL.find("localhost") != std::string::npos)
+	// note: this code should be removed in feature updates because we are going to eliminate WebUserName/WebPassword and always force a user/password
+	std::string WebUserName, WebPassword;
+	if (m_sql.GetPreferencesVar("WebUserName", WebUserName))
 	{
-		std::string allowedNetworks;
-		int rnvalue = 0;
-		m_sql.GetPreferencesVar("WebLocalNetworks", rnvalue, allowedNetworks);
-		if ((allowedNetworks.find("127.0.0.") == std::string::npos) && (allowedNetworks.find("::") == std::string::npos))
+		if (m_sql.GetPreferencesVar("WebPassword", WebPassword))
 		{
-			_log.Log(LOG_ERROR, "dzVents: local netWork not open for dzVents openURL call !");
-			_log.Log(LOG_ERROR, "dzVents: check dzVents wiki (look for 'Using dzVents with Domoticz')");
-			return false;
+			if ((!WebUserName.empty()) && (!WebPassword.empty()))
+			{
+				if (
+					(URL.find("127.0.0") != std::string::npos)
+					|| (URL.find("0.0.0.0") != std::string::npos)
+					|| (URL.find("localhost") != std::string::npos)
+					|| (URL.find("::") != std::string::npos)
+					)
+				{
+					// Check for the http and https ports so we only test for Domoticz api calls
+					std::string sHTTPPort = (!m_webservers.our_listener_port.empty()) ? m_webservers.our_listener_port : "";
+					std::string sHTTPSPort = (!secure_webserver_settings.listening_port.empty()) ? secure_webserver_settings.listening_port : "";
+
+					if (
+						((!sHTTPPort.empty()) && (URL.find(sHTTPPort) != std::string::npos))
+						|| ((!sHTTPSPort.empty()) && (URL.find(sHTTPSPort) != std::string::npos))
+						)
+					{
+						std::string allowedNetworks;
+						m_sql.GetPreferencesVar("WebLocalNetworks", allowedNetworks);
+						if (
+							(allowedNetworks.find("127.0.0.") == std::string::npos)
+							&& (allowedNetworks.find("0.0.0.0") == std::string::npos)
+							&& (allowedNetworks.find("localhost") == std::string::npos)
+							&& (allowedNetworks.find("::") == std::string::npos)
+							)
+						{
+							_log.Log(LOG_ERROR, "dzVents: local netWork not open for dzVents openURL call!");
+							_log.Log(LOG_ERROR, "dzVents: check dzVents wiki (look for 'Using dzVents with Domoticz')");
+							return false;
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -419,6 +456,8 @@ bool CdzVents::OpenURL(lua_State *lua_state, const std::vector<_tLuaTableValues>
 			eMethod = HTTPClient::HTTP_METHOD_PUT;
 		else if (method == "DELETE")
 			eMethod = HTTPClient::HTTP_METHOD_DELETE;
+		else if (method == "PATCH")
+			eMethod = HTTPClient::HTTP_METHOD_PATCH;
 		else
 		{
 			_log.Log(LOG_ERROR, "dzVents: Invalid HTTP method '%s'", method.c_str());

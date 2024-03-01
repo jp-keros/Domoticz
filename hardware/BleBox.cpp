@@ -4,7 +4,6 @@
 #include "../main/json_helper.h"
 #include "../main/Helper.h"
 #include "../main/HTMLSanitizer.h"
-#include "../main/localtime_r.h"
 #include "../main/Logger.h"
 #include "../main/mainworker.h"
 #include "../main/SQLHelper.h"
@@ -24,13 +23,13 @@ struct STR_DEVICE {
 constexpr std::array<STR_DEVICE, 9> DevicesType{
 	{
 		{ 0, "switchBox", "Switch Box", pTypeLighting2, sTypeAC, STYPE_OnOff, "relay" },
-		{ 1, "shutterBox", "Shutter Box", pTypeLighting2, sTypeAC, STYPE_BlindsPercentageInverted, "shutter" },
+		{ 1, "shutterBox", "Shutter Box", pTypeLighting2, sTypeAC, STYPE_BlindsPercentage, "shutter" },
 		{ 2, "wLightBoxS", "Light Box S", pTypeLighting2, sTypeAC, STYPE_Dimmer, "light" },
 		{ 3, "wLightBox", "Light Box", pTypeColorSwitch, sTypeColor_RGB_W, STYPE_Dimmer, "rgbw" },
 		{ 4, "gateBox", "Gate Box", pTypeGeneral, sTypePercentage, 0, "gate" },
 		{ 5, "dimmerBox", "Dimmer Box", pTypeLighting2, sTypeAC, STYPE_Dimmer, "dimmer" },
 		{ 6, "switchBoxD", "Switch Box D", pTypeLighting2, sTypeAC, STYPE_OnOff, "relay" },
-		{ 7, "airSensor", "Air Sensor", pTypeAirQuality, sTypeVoltcraft, 0, "air" },
+		{ 7, "airSensor", "Air Sensor", pTypeAirQuality, sTypeVoc, 0, "air" },
 		{ 8, "tempSensor", "Temp Sensor", pTypeGeneral, sTypeTemperature, 0, "tempsensor" },
 	},
 };
@@ -257,7 +256,6 @@ void BleBox::GetDevicesState()
 					break;
 				}
 			}
-			SetHeartbeatReceived();
 		}
 	}
 }
@@ -759,7 +757,7 @@ namespace http {
 					root["result"][ii]["hv"] = "unknown";
 					root["result"][ii]["fv"] = "unknown";
 
-					BleBox* pHardware = reinterpret_cast<BleBox*>(pBaseHardware);
+					BleBox* pHardware = dynamic_cast<BleBox*>(pBaseHardware);
 
 					int type = pHardware->GetDeviceType(ip);
 					if (type != -1)
@@ -801,7 +799,7 @@ namespace http {
 			CDomoticzHardwareBase * pBaseHardware = m_mainworker.GetHardwareByIDType(hwid, HTYPE_BleBox);
 			if (pBaseHardware == nullptr)
 				return;
-			BleBox * pHardware = reinterpret_cast<BleBox*>(pBaseHardware);
+			BleBox * pHardware = dynamic_cast<BleBox*>(pBaseHardware);
 
 			root["status"] = "OK";
 			root["title"] = "BleBoxSetMode";
@@ -831,7 +829,7 @@ namespace http {
 			CDomoticzHardwareBase * pBaseHardware = m_mainworker.GetHardwareByIDType(hwid, HTYPE_BleBox);
 			if (pBaseHardware == nullptr)
 				return;
-			BleBox * pHardware = reinterpret_cast<BleBox*>(pBaseHardware);
+			BleBox * pHardware = dynamic_cast<BleBox*>(pBaseHardware);
 
 			root["status"] = "OK";
 			root["title"] = "BleBoxAddNode";
@@ -853,7 +851,7 @@ namespace http {
 			CDomoticzHardwareBase * pBaseHardware = m_mainworker.GetHardwareByIDType(hwid, HTYPE_BleBox);
 			if (pBaseHardware == nullptr)
 				return;
-			BleBox * pHardware = reinterpret_cast<BleBox*>(pBaseHardware);
+			BleBox * pHardware = dynamic_cast<BleBox*>(pBaseHardware);
 
 			root["status"] = "OK";
 			root["title"] = "BleBoxRemoveNode";
@@ -873,7 +871,7 @@ namespace http {
 			CDomoticzHardwareBase* pBaseHardware = m_mainworker.GetHardwareByIDType(hwid, HTYPE_BleBox);
 			if (pBaseHardware == nullptr)
 				return;
-			BleBox * pHardware = reinterpret_cast<BleBox*>(pBaseHardware);
+			BleBox * pHardware = dynamic_cast<BleBox*>(pBaseHardware);
 
 			root["status"] = "OK";
 			root["title"] = "BleBoxClearNodes";
@@ -895,7 +893,7 @@ namespace http {
 			CDomoticzHardwareBase * pBaseHardware = m_mainworker.GetHardwareByIDType(hwid, HTYPE_BleBox);
 			if (pBaseHardware == nullptr)
 				return;
-			BleBox * pHardware = reinterpret_cast<BleBox*>(pBaseHardware);
+			BleBox * pHardware = dynamic_cast<BleBox*>(pBaseHardware);
 
 			root["status"] = "OK";
 			root["title"] = "BleBoxAutoSearchingNodes";
@@ -914,7 +912,7 @@ namespace http {
 			CDomoticzHardwareBase* pBaseHardware = m_mainworker.GetHardwareByIDType(hwid, HTYPE_BleBox);
 			if (pBaseHardware == nullptr)
 				return;
-			BleBox * pHardware = reinterpret_cast<BleBox*>(pBaseHardware);
+			BleBox * pHardware = dynamic_cast<BleBox*>(pBaseHardware);
 
 			root["status"] = "OK";
 			root["title"] = "BleBoxUpdateFirmware";
@@ -1069,19 +1067,19 @@ void BleBox::AddNode(const std::string & name, const std::string & IPAddress, bo
 
 	if (deviceType.unit == 4) // gatebox
 	{
-		m_sql.InsertDevice(m_HwdID, szIdx.c_str(), 1, (uint8_t)deviceType.deviceID, deviceType.subType, deviceType.switchType, 0, "Unavailable", name);
-		m_sql.InsertDevice(m_HwdID, szIdx.c_str(), 2, pTypeGeneralSwitch, sTypeAC, STYPE_PushOn, 0, "Unavailable", name);
-		m_sql.InsertDevice(m_HwdID, szIdx.c_str(), 3, pTypeGeneralSwitch, sTypeAC, STYPE_PushOn, 0, "Unavailable", name);
+		m_sql.InsertDevice(m_HwdID, 0, szIdx.c_str(), 1, (uint8_t)deviceType.deviceID, deviceType.subType, deviceType.switchType, 0, "Unavailable", name);
+		m_sql.InsertDevice(m_HwdID, 0, szIdx.c_str(), 2, pTypeGeneralSwitch, sTypeAC, STYPE_PushOn, 0, "Unavailable", name);
+		m_sql.InsertDevice(m_HwdID, 0, szIdx.c_str(), 3, pTypeGeneralSwitch, sTypeAC, STYPE_PushOn, 0, "Unavailable", name);
 	}
 	else
 		if (deviceType.unit == 6) // switchboxd
 		{
-			m_sql.InsertDevice(m_HwdID, szIdx.c_str(), 0, (uint8_t)deviceType.deviceID, deviceType.subType, deviceType.switchType, 0, "Unavailable", name);
-			m_sql.InsertDevice(m_HwdID, szIdx.c_str(), 1, (uint8_t)deviceType.deviceID, deviceType.subType, deviceType.switchType, 0, "Unavailable", name);
+			m_sql.InsertDevice(m_HwdID, 0, szIdx.c_str(), 0, (uint8_t)deviceType.deviceID, deviceType.subType, deviceType.switchType, 0, "Unavailable", name);
+			m_sql.InsertDevice(m_HwdID, 0, szIdx.c_str(), 1, (uint8_t)deviceType.deviceID, deviceType.subType, deviceType.switchType, 0, "Unavailable", name);
 		}
 		else
 		{
-			m_sql.InsertDevice(m_HwdID, szIdx.c_str(), 0, (uint8_t)deviceType.deviceID, deviceType.subType, deviceType.switchType, 0, "Unavailable", name);
+			m_sql.InsertDevice(m_HwdID, 0, szIdx.c_str(), 0, (uint8_t)deviceType.deviceID, deviceType.subType, deviceType.switchType, 0, "Unavailable", name);
 		}
 
 	if (reloadNodes)

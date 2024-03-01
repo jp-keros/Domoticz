@@ -3,7 +3,6 @@
 #include "../main/Logger.h"
 #include "../main/Helper.h"
 #include <iostream>
-#include "../main/localtime_r.h"
 
 #define S0METER_RETRY_DELAY 30
 
@@ -83,7 +82,7 @@ bool S0MeterTCP::WriteToHardware(const char *pdata, const unsigned char length)
 
 void S0MeterTCP::OnData(const unsigned char *pData, size_t length)
 {
-	ParseData((const unsigned char*)pData,length);
+	ParseData((const unsigned char*)pData,static_cast<int>(length));
 }
 
 void S0MeterTCP::OnError(const boost::system::error_code& error)

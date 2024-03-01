@@ -4,7 +4,6 @@
 #include "../main/Logger.h"
 #include "../httpclient/UrlEncode.h"
 #include "hardwaretypes.h"
-#include "../main/localtime_r.h"
 #include "../httpclient/HTTPClient.h"
 #include "../main/json_helper.h"
 #include "../main/RFXtrx.h"
@@ -69,9 +68,26 @@ COpenWeatherMap::COpenWeatherMap(const int ID, const std::string &APIKey, const 
 	}
 }
 
+bool COpenWeatherMap::ResolveLonLat(const std::string& Location, double& latitude, double& longitude, uint32_t& cityid)
+{
+	std::stringstream sURL;
+	std::vector<std::string> strarray;
+
+	StringSplit(m_Location, ",", strarray);
+	if (strarray.size() == 2)
+	{
+		sURL << OWM_Get_City_Details;
+		sURL << "lat=" << strarray[0] << "&lon=" << strarray[1];
+		sURL << "&appid=" << m_APIKey;
+		sURL << "&units=metric" << "&lang=" << m_Language;
+
+		return ResolveOWMCityLonLat(sURL.str(), latitude, longitude, cityid);
+	}
+	return false;
+}
+
 bool COpenWeatherMap::ResolveLocation(const std::string& Location, double& latitude, double& longitude, uint32_t& cityid, const bool IsCityName)
 {
-	std::string sResult;
 	std::stringstream sURL;
 
 	sURL << OWM_Get_City_Details;
@@ -82,11 +98,18 @@ bool COpenWeatherMap::ResolveLocation(const std::string& Location, double& latit
 	sURL << "&appid=" << m_APIKey;
 	sURL << "&units=metric" << "&lang=" << m_Language;
 
-	Debug(DEBUG_NORM, "Get data from %s", sURL.str().c_str());
+	return ResolveOWMCityLonLat(sURL.str(), latitude, longitude, cityid);
+}
+
+bool COpenWeatherMap::ResolveOWMCityLonLat(const std::string sURL, double& latitude, double& longitude, uint32_t& cityid)
+{
+	std::string sResult;
+
+	Debug(DEBUG_NORM, "Get data from %s", sURL.c_str());
 
 	try
 	{
-		if (!HTTPClient::GET(sURL.str(), sResult))
+		if (!HTTPClient::GET(sURL, sResult))
 		{
 			Log(LOG_ERROR, "Error getting http data!");
 			return false;
@@ -167,6 +190,8 @@ bool COpenWeatherMap::StartHardware()
 						m_Lat = std::stod(sLatitude);
 						m_Lon = std::stod(sLongitude);
 
+						m_Location = sLatitude + "," + sLongitude;	// rewrite the default Location data to match what OWN expects
+
 						Log(LOG_STATUS, "Using Domoticz home location (Lon %s, Lat %s)!", sLongitude.c_str(), sLatitude.c_str());
 					}
 					else
@@ -180,119 +205,124 @@ bool COpenWeatherMap::StartHardware()
 				}
 			}
 		}
-		else
-		{
-			StringSplit(m_Location, ",", strarray);
-			if (strarray.size() == 2)
-			{
-				//It could be a City/Country or a Lat/Long (Londen,UK)
-				sLatitude = strarray[0];
-				sLongitude = strarray[1];
 
-				char* p;
-				double converted = strtod(sLatitude.c_str(), &p);
-				if (*p)
+		StringSplit(m_Location, ",", strarray);
+		if (strarray.size() == 2)
+		{
+			//It could be a City/Country or a Lat/Long (Londen,UK)
+			sLatitude = strarray[0];
+			sLongitude = strarray[1];
+
+			double lat, lon;
+			char* p;
+			double converted = strtod(sLatitude.c_str(), &p);
+			if (*p)
+			{
+				// conversion failed because the input wasn't a number
+				// assume it is a city/country combination
+				Log(LOG_STATUS, "Using specified location (City %s)!", m_Location.c_str());
+				if (!ResolveLocation(m_Location, lat, lon, cityid))
 				{
-					// conversion failed because the input wasn't a number
-					// assume it is a city/country combination
-					Log(LOG_STATUS, "Using specified location (City %s)!", m_Location.c_str());
-					double lat, lon;
-					if (!ResolveLocation(m_Location, lat, lon, cityid))
-					{
-						Log(LOG_ERROR, "Unable to resolve City to Latitude/Longitude, please use Latitude,Longitude directly in hardware setup!)");
-					}
-					else
-					{
-						Log(LOG_STATUS, "City (%d)-> Lat/Long = %g,%g", cityid, lat, lon);
-						m_Lat = lat;
-						m_Lon = lon;
-						m_CityID = cityid;
-					}
+					Log(LOG_ERROR, "Unable to resolve City to Latitude/Longitude, please use Latitude,Longitude directly in hardware setup!)");
+				}
+				else
+				{
+					Log(LOG_STATUS, "City (%d)-> Lat/Long = %g,%g", cityid, lat, lon);
+					m_Lat = lat;
+					m_Lon = lon;
+					m_CityID = cityid;
+				}
+			}
+			else
+			{
+				if (ResolveLonLat(m_Location, lat, lon, cityid))
+				{
+					Log(LOG_STATUS, "Lat/Long = %g,%g -> (Nearest) City (%d)", lat, lon, cityid);
+					m_Lat = lat;
+					m_Lon = lon;
+					m_CityID = cityid;
 				}
 				else
 				{
 					m_Lat = std::stod(sLatitude);
 					m_Lon = std::stod(sLongitude);
-
-					Log(LOG_STATUS, "Using specified location (Lon %s, Lat %s)!", sLongitude.c_str(), sLatitude.c_str());
+					Log(LOG_STATUS, "Using specified location (Lon %s, Lat %s) Unable to find nearest City!", sLongitude.c_str(), sLatitude.c_str());
 				}
 			}
-			else if (m_Location.find("lat=") == 0)
+		}
+		else if (m_Location.find("lat=") == 0)
+		{
+			StringSplit(m_Location, "&", strarray);
+			if (strarray.size() == 2)
 			{
-				StringSplit(m_Location, "&", strarray);
-				if (strarray.size() == 2)
+				sLatitude = strarray[0];
+				sLongitude = strarray[1];
+				if ((sLatitude.find("lat=") == 0) && (sLongitude.find("lon=") == 0))
 				{
-					sLatitude = strarray[0];
-					sLongitude = strarray[1];
-					if ((sLatitude.find("lat=") == 0) && (sLongitude.find("lon=") == 0))
-					{
-						m_Lat = std::stod(sLatitude.substr(4));
-						m_Lon = std::stod(sLongitude.substr(4));
-						Log(LOG_STATUS, "Using specified location (Lon %s, Lat %s)!", sLongitude.c_str(), sLatitude.c_str());
-					}
-					else
-						Log(LOG_ERROR, "Invalid Location specified! (Check your StationId/CityId or Latitude, Longitude!)");
+					m_Lat = std::stod(sLatitude.substr(4));
+					m_Lon = std::stod(sLongitude.substr(4));
+					Log(LOG_STATUS, "Using specified location (Lon %s, Lat %s)!", sLongitude.c_str(), sLatitude.c_str());
 				}
 				else
 					Log(LOG_ERROR, "Invalid Location specified! (Check your StationId/CityId or Latitude, Longitude!)");
 			}
 			else
+				Log(LOG_ERROR, "Invalid Location specified! (Check your StationId/CityId or Latitude, Longitude!)");
+		}
+		else
+		{
+			//Could be a Station ID (Number) or a City
+			char* p;
+			long converted = strtol(m_Location.c_str(), &p, 10);
+			double lat, lon;
+			if (*p)
 			{
-				//Could be a Station ID (Number) or a City
-				char* p;
-				long converted = strtol(m_Location.c_str(), &p, 10);
-				double lat, lon;
-				if (*p)
+				//City
+				Log(LOG_STATUS, "Using specified location (City %s)!", m_Location.c_str());
+				if (!ResolveLocation(m_Location, lat, lon, cityid))
 				{
-					//City
-					Log(LOG_STATUS, "Using specified location (City %s)!", m_Location.c_str());
-					if (!ResolveLocation(m_Location, lat, lon, cityid))
-					{
-						Log(LOG_ERROR, "Unable to resolve City to Latitude/Longitude, please use Latitude,Longitude directly in hardware setup!)");
-					}
-					else
-					{
-						Log(LOG_STATUS, "City (%d)-> Lat/Long = %g,%g", cityid, lat, lon);
-						m_Lat = lat;
-						m_Lon = lon;
-						m_CityID = cityid;
-					}
+					Log(LOG_ERROR, "Unable to resolve City to Latitude/Longitude, please use Latitude,Longitude directly in hardware setup!)");
 				}
 				else
 				{
-					//Station ID
-					Log(LOG_STATUS, "Using specified location (Station ID %s)!", m_Location.c_str());
-					if (!ResolveLocation(m_Location, lat, lon, cityid, false))
-					{
-						Log(LOG_ERROR, "Unable to resolve City to Latitude/Longitude, please use Latitude,Longitude directly in hardware setup!)");
-					}
-					else
-					{
-						Log(LOG_STATUS, "City (%d)-> Lat/Long = %g,%g", cityid, lat, lon);
-						m_Lat = lat;
-						m_Lon = lon;
-						m_CityID = cityid;
-					}
+					Log(LOG_STATUS, "City (%d)-> Lat/Long = %g,%g", cityid, lat, lon);
+					m_Lat = lat;
+					m_Lon = lon;
+					m_CityID = cityid;
+				}
+			}
+			else
+			{
+				//Station ID
+				Log(LOG_STATUS, "Using specified location (Station ID %s)!", m_Location.c_str());
+				if (!ResolveLocation(m_Location, lat, lon, cityid, false))
+				{
+					Log(LOG_ERROR, "Unable to resolve City to Latitude/Longitude, please use Latitude,Longitude directly in hardware setup!)");
+				}
+				else
+				{
+					Log(LOG_STATUS, "City (%d)-> Lat/Long = %g,%g", cityid, lat, lon);
+					m_Lat = lat;
+					m_Lon = lon;
+					m_CityID = cityid;
 				}
 			}
 		}
 	}
 
-	//Forecast URL
-	if (m_CityID > 0)
+	if(m_use_owminforecastscreen)
 	{
-		std::stringstream ss;
-		ss << OWM_forecast_URL << m_CityID;
-		m_ForecastURL = ss.str();
-
-		// So we can use this for the forecast screen of the UI if the users wants that
-		if(m_use_owminforecastscreen)
+		if (m_CityID > 0)
 		{
+			std::stringstream ss;
+			ss << OWM_forecast_URL << m_CityID;
+			m_ForecastURL = ss.str();
+
 			Log(LOG_STATUS, "Updating preferences for forecastscreen to use OpenWeatherMap!");
 			m_sql.UpdatePreferencesVar("ForecastHardwareID",m_HwdID);
 		}
 	}
-	if(!m_use_owminforecastscreen)
+	else
 	{
 		int iValue;
 		m_sql.GetPreferencesVar("ForecastHardwareID", iValue);
@@ -487,27 +517,36 @@ bool COpenWeatherMap::ProcessForecast(Json::Value &forecast, const std::string &
 				uvi = forecast["uvi"].asFloat();
 			}
 
-			//Rain (only present if there is rain (or snow))
-			if (!forecast["rain"].empty())
+			//Set Rain to 0 when PoP = 0 (Probability of precipitation)
+			if (pop == 0)
 			{
-				if (!forecast["rain"].isObject())
-				{
-					rainmm = forecast["rain"].asFloat();
-				}
-				else if (!forecast["rain"]["1h"].empty())
-				{
-					rainmm = forecast["rain"]["1h"].asFloat();
-				}
+				rainmm = 0;
 			}
-			if (!forecast["snow"].empty())
+			else
 			{
-				if (!forecast["snow"].isArray())
+				//Rain (only present if there is rain (or snow))
+				rainmm = 0; // feels weird, but sometimes it seems to happen that PoP > 0 but no rain/snow data
+				if (!forecast["rain"].empty())
 				{
-					rainmm = rainmm + forecast["snow"].asFloat();
+					if (!forecast["rain"].isObject())
+					{
+						rainmm = forecast["rain"].asFloat();
+					}
+					else if (!forecast["rain"]["1h"].empty())
+					{
+						rainmm = forecast["rain"]["1h"].asFloat();
+					}
 				}
-				else if (!forecast["snow"]["1h"].empty())
+				if (!forecast["snow"].empty())
 				{
-					rainmm = rainmm + forecast["snow"]["1h"].asFloat();
+					if (!forecast["snow"].isObject())
+					{
+						rainmm = rainmm + forecast["snow"].asFloat();
+					}
+					else if (!forecast["snow"]["1h"].empty())
+					{
+						rainmm = rainmm + forecast["snow"]["1h"].asFloat();
+					}
 				}
 			}
 
@@ -517,7 +556,7 @@ bool COpenWeatherMap::ProcessForecast(Json::Value &forecast, const std::string &
 			sName << "TempHumBaro " << period << " " << (count + 0);
 			SendTempHumBaroSensorFloat(NodeID, 255, maxtemp, humidity, barometric, barometric_forecast, sName.str());
 
-			NodeID++;;
+			NodeID++;
 			sName.str("");
 			sName.clear();
 			sName << "Weather Description " << period << " " << (count + 0);
@@ -534,7 +573,7 @@ bool COpenWeatherMap::ProcessForecast(Json::Value &forecast, const std::string &
 			if(m_add_descriptiondevices)
 				SendTextSensor(NodeID, 3, 255, periodname, sName.str());
 
-			NodeID++;;
+			NodeID++;
 			sName.str("");
 			sName.clear();
 			sName << "Minumum Temperature " << period << " " << (count + 0);
@@ -543,13 +582,13 @@ bool COpenWeatherMap::ProcessForecast(Json::Value &forecast, const std::string &
 				SendTempSensor(NodeID, 255, mintemp, sName.str());
 			}
 
-			NodeID++;;
+			NodeID++;
 			sName.str("");
 			sName.clear();
 			sName << "Wind " << period << " " << (count + 0);
 			SendWind(NodeID, 255, wind_degrees, windspeed_ms, 0, 0, 0, false, false, sName.str());
 
-			NodeID++;;
+			NodeID++;
 			sName.str("");
 			sName.clear();
 			sName << "UV Index " << period << " " << (count + 0);
@@ -561,14 +600,14 @@ bool COpenWeatherMap::ProcessForecast(Json::Value &forecast, const std::string &
 			NodeID++;
 			// We do not have visibility forecasts
 
-			NodeID++;;
+			NodeID++;
 			sName.str("");
 			sName.clear();
 			sName << "Clouds % " << period << " " << (count + 0);
 			SendPercentageSensor(NodeID, 1, 255, clouds, sName.str());
 
-			NodeID++;;
-			if ((rainmm != 9999.00F) && (rainmm >= 0.00F))
+			NodeID++;
+			if (rainmm != 9999.00F)
 			{
 				sName.str("");
 				sName.clear();
@@ -576,7 +615,7 @@ bool COpenWeatherMap::ProcessForecast(Json::Value &forecast, const std::string &
 				SendRainRateSensor(NodeID, 255, rainmm, sName.str());
 			}
 
-			NodeID++;;
+			NodeID++;
 			sName.str("");
 			sName.clear();
 			sName << "Precipitation " << period << " " << (count + 0);

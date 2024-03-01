@@ -36,7 +36,8 @@ lowercase(){
 
 OS=`lowercase \`uname -s\``
 MACH=`uname -m`
-if [ ${MACH} = "armv6l" ]
+ARCH=`dpkg --print-architecture`
+if [ ${MACH} = "armv6l" ] || [ ${ARCH} = "armhf" ]
 then
  MACH="armv7l"
 fi
@@ -174,7 +175,9 @@ displayFinalMessage() {
 	whiptail --msgbox --backtitle "Ready..." --title "Installation Complete!" "Point your browser to either:
 
 HTTP:	${IPv4_address%/*}:${HTTP_port%/*}
-HTPS:	${IPv4_address%/*}:${HTTPS_port}
+HTTPS:	${IPv4_address%/*}:${HTTPS_port}
+User/Password:   admin/domoticz 
+Modify password asap in menu Setup - MyProfile
 
 Wiki:  https://www.domoticz.com/wiki
 Forum: https://www.domoticz.com/forum

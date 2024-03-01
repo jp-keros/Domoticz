@@ -9,7 +9,7 @@
 
 /*
                                                                    
-Copyright 2011-2021, RFXCOM
+Copyright 2011-2023, RFXCOM
 
 ALL RIGHTS RESERVED. This code is owned by RFXCOM, and is protected under
 Netherlands Copyright Laws and Treaties and shall be subject to the 
@@ -27,6 +27,47 @@ portions of this file.
 */
 
 /*
+SDK version 9.40	June 21, 2023
+	msg3_868 ALECTO5500enabled changed to FINEOFFSETenabled
+	FWtypeRFX310 added
+	Brel bi-directional updated
+
+SDK version 9.39	February 27, 2023
+	Orcon struct FANEXT added
+	lightning WH57 added
+	Ecowitt WS90 added
+
+SDK version 9.38	February 1, 2023
+	Honeywell ActiveLink updated
+
+SDK version 9.37	January 4, 2023
+	msg3_868_Alecto5500 changed to FineOffset
+	FWtypeProXL69 changed to FWtypeRFX433
+	FWtypeRFX868 added
+	sTypeRAIN10  FineOffset WH5360,EcoWitt WH40 added
+
+SDK version 9.36	December 17, 2022
+	FAN sTypeIthoHRU400 added
+	868 config bits updated
+
+SDK version 9.35	November 15, 2022
+	FWtypeProXL69/95 added
+
+SDK version 9.34	November 3, 2022
+	Orcon fan added
+	IthoECO fan added
+	Davis ID added
+	Itho and Orcon Undecoded added
+
+SDK version 9.33	April 11, 2022
+	Thermostat5 - Gazco added
+	Chime - ByronDBY added
+	Chime stucture changed
+	Novy Filter and Mood added
+
+SDK version 9.32	July 12, 2021
+	Brel bi-directional added
+
 SDK version 9.31	April 6, 2021
 	BlindsT19 Louvolite vertical added (not yet operational)
 	BlindsT20 Ozroll E-Trans added
@@ -447,6 +488,11 @@ SDK version 4.9
 #define FWtypePro2 0x6
 #define FWtypeProXL1 0x10
 #define FWtypeProXL2 0x13
+#define FWtypeRFX433 0x14 //RFM69 433 firmware
+#define FWtypeRFX868 0x15 //RFM69 868 firmware
+#define FWtypeProXL95 0x16 //RFM95 firmware
+#define FWtypeRFX433XXL 0x17 //RFU
+#define FWtypeRFX310 0x18 //RFXusb with 310MHz receiver module
 
 //433 config bits
 #define msg3_AE 0x01			//AE Blyss
@@ -491,14 +537,14 @@ SDK version 4.9
 #define msg3_868_DAVISUS 0x04	//Davis US
 #define msg3_868_DAVISEU 0x08	//Davis EU
 #define msg3_868_LACROSSE 0x10  //LACROSSE
-#define msg3_868_ALECTO5500 0x20	//Alecto WS5500
+#define msg3_868_FINEOFFSET 0x20	//FINEOFFSET
 #define msg3_868_ALECTO 0x40	//Alecto ACH2010
 #define msg3_868_UNDEC 0x80		//Enable undecoded
 
 #define msg4_868_EDISIO 0x01	//EDISIO
 #define msg4_868_LWRF 0x02		//LightwaveRF
 #define msg4_868_FS20 0x04		//FS20
-#define msg4_868_RFU3 0x08		//RFU
+#define msg4_868_RFU3  0x08		//RFU
 #define msg4_868_RFU4 0x10		//RFU
 #define msg4_868_RFU5 0x20		//RFU
 #define msg4_868_RFU6 0x40		//RFU
@@ -509,18 +555,27 @@ SDK version 4.9
 #define msg5_868_RFU2 0x04		//RFU
 #define msg5_868_RFU3 0x08		//RFU
 #define msg5_868_PROGUARD  0x10 //Proguard
-#define msg5_868_KEELOQ 0x20    //KEELOQ
+#define msg5_868_RFU5 0x20		//RFU
 #define msg5_868_MEIANTECH 0x40	//Meiantech,Atlantic
 #define msg5_868_VISONIC 0x80	//Visonic
 
-#define msg6_868_RFU0 0x01		//RFU
-#define msg6_868_RFU1 0x02		//RFU
+#define msg6_868_KEELOQ 0x01    //KEELOQ
+#define msg6_868_HONCHIME 0x02	//Honeywell Chime
 #define msg6_868_RFU2 0x04		//RFU
 #define msg6_868_RFU3 0x08		//RFU
-#define msg6_868_RFU4 0x10		//RFU
-#define msg6_868_HONCHIME 0x20	//Honeywell Chime
+#define msg6_868_ITHOHRU400 0x10 //Itho CVE-S,HRU400
+#define msg6_868_ORCON 0x20		//Orcon
 #define msg6_868_ITHOECO 0x40	//Itho CVE ECO RFT
 #define msg6_868_ITHO 0x80		//Itho CVE RFT
+
+#define msg7_868_DAVIS_ID0 0x01    //Davis ID0
+#define msg7_868_DAVIS_ID1 0x02    //Davis ID1
+#define msg7_868_DAVIS_ID2 0x04    //Davis ID2
+#define msg7_868_RFU3 0x08		//RFU
+#define msg7_868_RFU4 0x10		//RFU
+#define msg7_868_RFU5 0x20		//RFU
+#define msg7_868_RFU6 0x40		//RFU
+#define msg7_868_RFU7 0x80		//RFU
 
 #define pTypeRecXmitMessage 0x02
 #define sTypeReceiverLockError 0x00
@@ -551,9 +606,13 @@ SDK version 4.9
 #define sTypeUrfy 0x14
 #define sTypeUselectplus 0x15
 #define sTypeUhomeconfort 0x16
-#define sTypeURFXtrx868 0x17
+#define sTypeUedisio 0x17
+#define sTypeUhoneywell 0x18
 #define sTypeUfunkbus 0x19
 #define sTypeUbyronsx 0x1A
+#define sTypeUddxxxx 0x1B
+#define sTypeUitho 0x1C
+#define sTypeUorcon 0x1D
 
 //types for Lighting
 #define pTypeLighting1 0x10
@@ -732,6 +791,7 @@ SDK version 4.9
 #define sTypeEnvivo 0x4
 #define sTypeAlfawise 0x5
 #define sType1byOne 0x6
+#define sTypeByronDBY 0x7
 #define chime_sound0 0x1
 #define chime_sound1 0x3
 #define chime_sound2 0x5
@@ -754,6 +814,8 @@ SDK version 4.9
 #define sTypeLucciAirDCII 0x9
 #define sTypeIthoECO 0xA
 #define sTypeNovy 0xB
+#define sTypeOrcon 0xC
+#define sTypeIthoHRU400 0x0D
 
 #define fan_sTimer 0x1
 #define fan_sMin 0x2
@@ -761,6 +823,7 @@ SDK version 4.9
 #define fan_sPlus 0x4
 #define fan_sConfirm 0x5
 #define fan_sLight 0x6
+
 #define fan_Itho1 0x1
 #define fan_Itho2 0x2
 #define fan_Itho3 0x3
@@ -768,20 +831,24 @@ SDK version 4.9
 #define fan_IthoNotAtHome 0x5
 #define fan_IthoLearn 0x6
 #define fan_IthoEraseAll 0x7
+
 #define fan_LucciHi 0x1
 #define fan_LucciMed 0x2
 #define fan_LucciLow 0x3
 #define fan_LucciOff 0x4
 #define fan_LucciLight 0x5
+
 #define fan_T1 0x1
 #define fan_T2 0x2
 #define fan_T3 0x3
 #define fan_T4 0x4
+
 #define fan_WestinghouseHi 0x1
 #define fan_WestinghouseMed 0x2
 #define fan_WestinghouseLow 0x3
 #define fan_WestinghouseOff 0x4
 #define fan_WestinghouseLight 0x5
+
 #define fan_LucciDCPower 0x1
 #define fan_LucciDCPlus 0x2
 #define fan_LucciDCMin 0x3
@@ -832,11 +899,46 @@ SDK version 4.9
 #define fan_LucciDCII6 0x7
 #define fan_LucciDCIILight 0x8
 #define fan_LucciDCIIReverse 0x9
+
+#define fan_IthoECOlow 0x1
+#define fan_IthoECOmedium 0x2
+#define fan_IthoECOhigh 0x3
+#define fan_IthoECOtimer1 0x4
+#define fan_IthoECOtimer2 0x5
+#define fan_IthoECOtimer3 0x6
+#define fan_IthoECOaway 0x7
+#define fan_IthoECOjoin 0x8
+#define fan_IthoECOleave 0x9
+#define fan_IthoECOtemp 0xA
+#define fan_IthoECOco2 0xB
+#define fan_IthoECObattery 0xC
+
 #define fan_NovyPower 0x1
 #define fan_NovyPlus 0x2
 #define fan_NovyMin 0x3
 #define fan_NovyLight 0x4
 #define fan_NovyLearn 0x5
+#define fan_NovyFilter 0x6
+#define fan_NovyMood 0x7
+
+#define fan_Orconlow 0x1
+#define fan_Orconmedium 0x2
+#define fan_Orconhigh 0x3
+#define fan_Orcontimer1 0x4
+#define fan_Orcontimer2 0x5
+#define fan_Orcontimer3 0x6
+#define fan_Orconauto 0x7
+#define fan_Orconaway 0x8
+#define fan_Orconjoin 0x9
+#define fan_Orconleave 0xA
+#define fan_Orconstate 0xB
+#define fan_Orcontemp 0xC
+#define fan_Orconco2 0xD
+#define fan_Orconbattery 0xE
+#define fan_Orconfilter 0xF
+#define fan_Orconpresence 0x10
+#define fan_Orconspeed 0x11
+#define fan_Orconstatus 0x12
 
 //types for Curtain
 #define pTypeCurtain 0x18
@@ -969,6 +1071,43 @@ SDK version 4.9
 #define HunterSpeed3 0x5
 #define HunterProgram 0x6
 
+//types for Edisio
+#define pTypeEdisio 0x1C
+#define sTypeEdisioGateway      0x00
+#define sTypeEdisioEmitter      0x01
+#define sTypeEdisioEmit230      0x02
+#define sTypeEdisioMotion       0x03
+#define sTypeEdisioDoor         0x04
+#define sTypeEdisioTemp         0x05
+#define sTypeEdisioLighting     0x06
+#define sTypeEdisioDimmer       0x07
+#define sTypeEdisioLightOnOff   0x08
+#define sTypeEdisioShutter      0x09
+#define sTypeEdisioShutterOSC   0x0A
+#define sTypeEdisioHeatCool     0x0B
+#define sTypeEdisioPilot        0x0C
+
+#define EdisioOff           0x00
+#define EdisioOn            0x01
+#define EdisioToggle        0x02
+#define EdisioSetLevel      0x03
+#define EdisioBright        0x04
+#define EdisioDim           0x05
+#define EdisioToggleDim     0x06
+#define EdisioStopDim       0x07
+#define EdisioRGB           0x08
+#define EdisioLearn         0x09
+#define EdisioShutterOpen	0x0A
+#define EdisioShutterStop	0x0B
+#define EdisioShutterClose	0x0C
+#define EdisioContactNormal	0x0D
+#define EdisioContactAlert	0x0E
+
+//types for Honeywell ActivLink
+#define pTypeHoneywell_AL 0x1D
+#define sTypeSeries5      0x00
+#define sTypePIR          0x01
+
 //types for Security1
 #define pTypeSecurity1 0x20
 #define sTypeSecX10 0x0				//X10 security
@@ -1045,6 +1184,22 @@ SDK version 4.9
 #define sTypePCremote 0x3	//PC Remote
 #define sTypeATIrw2 0x4		//ATI Remote Wonder II
 
+//types for Bi-directional Blinds DDxxxx
+#define pTypeDDxxxx 0x31
+#define sTypeDDxxxx 0x00
+#define DDxxxx_Up 0x0
+#define DDxxxx_Down 0x1
+#define DDxxxx_Stop 0x2
+#define DDxxxx_P2 0x3	//Pair
+#define DDxxxx_Percent 0x4
+#define DDxxxx_Angle 0x5
+#define DDxxxx_PercentAngle 0x6
+#define DDxxxx_HoldUp 0x7 //not yet used
+#define DDxxxx_HoldStop 0x8 //not yet used
+#define DDxxxx_HoldUpDown 0x9 //not yet used
+#define DDxxxx_HoldStopUp 0xA //not yet used
+#define DDxxxx_HoldStopDown 0xB //not yet used
+
 //types for Thermostat
 #define pTypeThermostat1 0x40
 #define sTypeDigimax 0x0		//Digimax
@@ -1084,6 +1239,14 @@ SDK version 4.9
 #define thermostat4_sManual 0x1
 #define thermostat4_sAuto 0x2
 #define thermostat4_sEco 0x3
+
+#define pTypeThermostat5 0x44
+#define sTypeGazco 0x0
+#define thermostat5_sOff 0x0
+#define thermostat5_sOn 0x1
+#define thermostat5_sOnHeaterStby 0x2
+#define thermostat5_sOnHeaterLow 0x3
+#define thermostat5_sOnHeaterHigh 0x04
 
 //types for Radiator valve
 #define pTypeRadiator1 0x48
@@ -1168,6 +1331,7 @@ SDK version 4.9
 #define sTypeRAIN7 0x7   //Alecto
 #define sTypeRAIN8 0x8   //Davis
 #define sTypeRAIN9 0x9   //TFA 30.3233.01 
+#define sTypeRAIN10 0xA   //FineOffset WH5360,EcoWitt WH40
 
 //types for wind
 #define pTypeWIND 0x56
@@ -1318,8 +1482,13 @@ SDK version 4.9
 #define pTypeLEVELSENSOR 0x73
 #define sType0 0x0
 
+//LIGHTNING SENSOR
+#define pTypeLIGHTNING 0x74
+#define sTypeLIGHTNING1 0x0   //Ecowitt WH57
+
 //WEATHER STATIONS
 #define pTypeWEATHER 0x76
+#define sTypeWEATHER0 0x0   //Ecowitt WS90
 #define sTypeWEATHER1 0x1   //Alecto ACH2010
 #define sTypeWEATHER2 0x2   //Alecto WS5500
 
@@ -1435,7 +1604,7 @@ typedef union tRBUF {
         //BYTE	msg6;
         BYTE    KEELOQenabled : 1;
 		BYTE    HCEnabled : 1;
-        BYTE    MSG6Reserved2 : 1;
+        BYTE    DDenabled : 1;
         BYTE    MSG6Reserved3 : 1;
         BYTE    MSG6Reserved4 : 1;
         BYTE    MSG6Reserved5 : 1;
@@ -1443,11 +1612,11 @@ typedef union tRBUF {
         BYTE    MSG6Reserved7 : 1;
 #endif
 
-		BYTE	msg7;
-		BYTE	msg8;
-		BYTE	msg9;
-		BYTE	msg10;
-        BYTE	msg11;
+		BYTE	msg7;	//major version
+		BYTE	msg8;	//minor version
+		BYTE	msg9;	//RF power
+		BYTE	msg10;	//FW type
+        BYTE	msg11;	//noise level
         BYTE	msg12;
         BYTE	msg13;
         BYTE	msg14;
@@ -1468,7 +1637,7 @@ typedef union tRBUF {
 		//BYTE	msg3;
 		BYTE	UNDECODEDenabled : 1;
 		BYTE	ALECTOenabled : 1;
-		BYTE	ALECTO5500enabled : 1;
+		BYTE	FINEOFFSETenabled : 1;
 		BYTE	LACROSSEenabled : 1;
 		BYTE	DAVISEUenabled : 1;
 		BYTE	DAVISUSenabled : 1;
@@ -1498,12 +1667,28 @@ typedef union tRBUF {
 		//BYTE    msg6;
 		BYTE    ITHOenabled : 1;
 		BYTE    ITHOecoenabled : 1;
+		BYTE    ORCONenabled : 1;
 		BYTE    HONEYWELLenabled : 1;
-		BYTE    MSG6Reserved4 : 1;
 		BYTE    MSG6Reserved3 : 1;
 		BYTE    MSG6Reserved2 : 1;
 		BYTE    MSG6Reserved1 : 1;
 		BYTE    MSG6Reserved0 : 1;
+
+		//BYTE	msg7;
+		BYTE    MSG7Reserved7 : 1;
+		BYTE    MSG7Reserved6 : 1;
+		BYTE    MSG7Reserved5 : 1;
+		BYTE    MSG7Reserved4 : 1;
+		BYTE    MSG7Reserved3 : 1;
+		BYTE    DAVISID2 : 1;
+		BYTE    DAVISID1 : 1;
+		BYTE    DAVISID0 : 1;
+
+		//BYTE	msg8;
+		BYTE	msg8;
+
+		//BYTE	msg9;
+		BYTE	msg9;
 #else
 		//BYTE	msg3;
 		BYTE	MSG3Reserved0 : 1;
@@ -1511,7 +1696,7 @@ typedef union tRBUF {
 		BYTE	DAVISUSenabled : 1;
 		BYTE	DAVISEUenabled : 1;
 		BYTE	LACROSSEenabled : 1;
-		BYTE	ALECTO5500enabled : 1;
+		BYTE	FINEOFFSETenabled : 1;
 		BYTE	ALECTOenabled : 1;
 		BYTE	UNDECODEDenabled : 1;
 
@@ -1531,31 +1716,44 @@ typedef union tRBUF {
 		BYTE	MSG5Reserved2 : 1;
 		BYTE	MSG5Reserved3 : 1;
 		BYTE	PROGUARDenabled : 1;
-		BYTE    KEELOQenabled : 1;
+		BYTE    MSG5Reserved5 : 1;
 		BYTE	MEIANTECHenabled : 1;
 		BYTE	VISONICenabled : 1;
 
 		//BYTE	msg6;
-		BYTE    MSG6Reserved0 : 1;
+		BYTE    KEELOQenabled : 1;
 		BYTE    MSG6Reserved1 : 1;
 		BYTE    MSG6Reserved2 : 1;
 		BYTE    MSG6Reserved3 : 1;
-		BYTE    MSG6Reserved4 : 1;
 		BYTE    HONEYWELLenabled : 1;
+		BYTE    ORCONenabled : 1;
 		BYTE    ITHOecoenabled : 1;
 		BYTE    ITHOenabled : 1;
+
+		//BYTE	msg7;
+		BYTE    DAVISID0 : 1;
+		BYTE    DAVISID1 : 1;
+		BYTE    DAVISID2 : 1;
+		BYTE    MSG7Reserved3 : 1;
+		BYTE    MSG7Reserved4 : 1;
+		BYTE    MSG7Reserved5 : 1;
+		BYTE    MSG7Reserved6 : 1;
+		BYTE    MSG7Reserved7 : 1;
+
+		//BYTE	msg8;
+		BYTE	msg8;
+
+		//BYTE	msg9;
+		BYTE	msg9;
 #endif
 
-		BYTE	msg7;
-		BYTE	msg8;
-		BYTE	msg9;
 		BYTE	msg10;
 		BYTE	msg11;
-		BYTE	msg12;
-		BYTE	msg13;
-		BYTE	msg14;
-		BYTE	msg15;
-		BYTE	msg16;
+		BYTE	msg12;	//major version
+		BYTE	msg13;	//minor version
+		BYTE	msg14;	//RF power
+		BYTE	msg15;	//FW type
+		BYTE	msg16;	//noise level
 	} IRESPONSE868;
 
 	struct {
@@ -1730,11 +1928,12 @@ typedef union tRBUF {
 		BYTE	id1;
 		BYTE	id2;
 		BYTE	sound;
+		BYTE	id4;
 #ifdef IS_BIG_ENDIAN
 		BYTE	rssi : 4;
-		BYTE	id4 : 4;
+		BYTE	filler : 4;
 #else
-		BYTE	id4  : 4;
+		BYTE	filler  : 4;
 		BYTE	rssi : 4;
 #endif
 	} CHIME;
@@ -1756,6 +1955,85 @@ typedef union tRBUF {
 		BYTE	rssi : 4;
 #endif
 	} FAN;
+
+	struct {
+		BYTE	packetlength;
+		BYTE	packettype;
+		BYTE	subtype;
+		BYTE	seqnbr;
+		BYTE	id1;
+		BYTE	id2;
+		BYTE	id3;
+		BYTE	cmnd;
+#ifdef IS_BIG_ENDIAN
+		BYTE	rssi : 4;
+		BYTE	filler : 4;
+#else
+		BYTE	filler  : 4;
+		BYTE	rssi : 4;
+#endif
+		BYTE did1;
+		BYTE did2;
+		BYTE did3;
+		BYTE ext1;
+		BYTE ext2;
+		BYTE ext3;
+		BYTE ext4;
+		BYTE ext5;
+		BYTE ext6;
+	} FAN2;
+
+	struct {
+		BYTE packetlength;
+		BYTE packettype;
+		BYTE subtype;
+		BYTE seqnbr;
+		BYTE id1;
+		BYTE id2;
+		BYTE id3;
+		BYTE cmnd;
+#ifdef IS_BIG_ENDIAN
+		BYTE	rssi : 4;
+		BYTE	filler : 4;
+#else
+		BYTE	filler : 4;
+		BYTE	rssi : 4;
+#endif
+		BYTE did1;
+		BYTE did2;
+		BYTE did3;
+		BYTE ext1;
+		BYTE ext2;
+		BYTE ext3;
+		BYTE ext4;
+		BYTE ext5;
+		BYTE ext6;
+		BYTE ext7;
+		BYTE ext8;
+		BYTE ext9;
+		BYTE ext10;
+		BYTE ext11;
+		BYTE ext12;
+		BYTE ext13;
+		BYTE ext14;
+		BYTE ext15;
+		BYTE ext16;
+		BYTE ext17;
+		BYTE ext18;
+		BYTE ext19;
+		BYTE ext20;
+		BYTE ext21;
+		BYTE ext22;
+		BYTE ext23;
+		BYTE ext24;
+		BYTE ext25;
+		BYTE ext26;
+		BYTE ext27;
+		BYTE ext28;
+		BYTE ext29;
+		BYTE ext30;
+		BYTE ext31;
+	} FANEXT;
 
 	struct {
 		BYTE	packetlength;
@@ -1834,6 +2112,52 @@ typedef union tRBUF {
 		BYTE    rssi : 4;
 #endif
 	} HOMECONFORT;
+
+	struct {
+		BYTE packetlength;
+		BYTE packettype;
+		BYTE subtype;
+		BYTE seqnbr;
+		BYTE id1;
+		BYTE id2;
+		BYTE id3;
+		BYTE id4;
+		BYTE unitcode;
+		BYTE cmnd;
+		BYTE level;
+		BYTE R; //or temperatureh
+		BYTE G; //or temperaturel
+		BYTE B;
+		BYTE maxrepeat;
+		BYTE repeatcnt;
+#ifdef IS_BIG_ENDIAN
+		BYTE	rssi : 4;
+		BYTE	battery_level : 4;
+#else
+		BYTE	battery_level : 4;
+		BYTE	rssi : 4;
+#endif
+	} EDISIO;
+
+	struct {
+		BYTE packetlength;
+		BYTE packettype;
+		BYTE subtype;
+		BYTE seqnbr;
+		BYTE id1;
+		BYTE id2;
+		BYTE id3;
+		BYTE alert;
+		BYTE knock;
+		BYTE rfu;
+#ifdef IS_BIG_ENDIAN
+		BYTE	rssi : 4;
+		BYTE	battery_level : 4;
+#else
+		BYTE	battery_level : 4;
+		BYTE	rssi : 4;
+#endif
+	} HONEYWELL_AL;
 
 	struct {
 		BYTE	packetlength;
@@ -1974,6 +2298,28 @@ typedef union tRBUF {
 	} REMOTE;
 
 	struct {
+		BYTE packetlength;
+		BYTE packettype;
+		BYTE subtype;
+		BYTE seqnbr;
+		BYTE id1;
+		BYTE id2;
+		BYTE id3;
+		BYTE id4;
+		BYTE unitcode;
+		BYTE cmnd;
+		BYTE percent;
+		BYTE angle;
+#ifdef IS_BIG_ENDIAN
+		BYTE	rssi : 4;
+		BYTE	filler : 4;
+#else
+		BYTE	filler : 4;
+		BYTE	rssi : 4;
+#endif
+	} DDXXXX;
+
+	struct {
 		BYTE	packetlength;
 		BYTE	packettype;
 		BYTE	subtype;
@@ -2060,6 +2406,29 @@ typedef union tRBUF {
 		BYTE	rssi : 4;
 #endif
 	} THERMOSTAT4;
+
+	struct {
+		BYTE packetlength;
+		BYTE packettype;
+		BYTE subtype;
+		BYTE seqnbr;
+		BYTE unitcode1;
+		BYTE unitcode2;
+		BYTE cmnd;
+		BYTE flame_colour;
+		BYTE flame_brightness;
+		BYTE fuel_colour;
+		BYTE fuel_brightness;
+		BYTE rfu1;
+		BYTE rfu2;
+#ifdef IS_BIG_ENDIAN
+		BYTE	rssi : 4;
+		BYTE	filler : 4;
+#else
+		BYTE	filler : 4;
+		BYTE	rssi : 4;
+#endif
+	} THERMOSTAT5;
 
 	struct {
 		BYTE	packetlength;
@@ -2692,6 +3061,28 @@ typedef union tRBUF {
 		BYTE	rssi : 4;
 #endif
 	} LEVELSENSOR;
+
+	struct {
+		BYTE packetlength;
+		BYTE packettype;
+		BYTE subtype;
+		BYTE seqnbr;
+		BYTE id1;
+		BYTE id2;
+		BYTE id3;
+		BYTE status;
+		BYTE distance;
+		BYTE strike_cnt;
+		BYTE rfu1;
+		BYTE rfu2;
+#ifdef IS_BIG_ENDIAN
+		BYTE	rssi : 4;
+		BYTE	battery_level : 4;
+#else
+		BYTE	battery_level : 4;
+		BYTE	rssi : 4;
+#endif
+	} LIGHTNING;
 
 	struct {
 		BYTE packetlength;

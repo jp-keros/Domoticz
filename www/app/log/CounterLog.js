@@ -45,7 +45,7 @@ define(['app', 'lodash', 'RefreshingChart', 'DataLoader', 'ChartLoader', 'log/Ch
                                 preprocessData: subtype.preprocessDayData,
                                 preprocessDataItems: subtype.preprocessDayDataItems
                             },
-                            subtype.daySeriesSuppliers(self.device.SwitchTypeVal)
+                            subtype.daySeriesSuppliers(self.device.SwitchTypeVal, self.device.Divider)
                         )
                     );
                 }
@@ -79,10 +79,10 @@ define(['app', 'lodash', 'RefreshingChart', 'DataLoader', 'ChartLoader', 'log/Ch
                                 timestampFromDataItem: function (dataItem, yearOffset = 0) {
                                     return GetLocalDateFromString(dataItem.d, yearOffset);
                                 },
-                                preprocessData: subtype.preprocesWeeksData,
+                                preprocessData: subtype.preprocessWeekData,
                                 preprocessDataItems: subtype.preprocessWeekDataItems
                             },
-                            subtype.weekSeriesSuppliers(self.device.SwitchTypeVal)
+                            subtype.weekSeriesSuppliers(self.device.SwitchTypeVal, self.device.Divider)
                         )
                     );
                 }
@@ -119,7 +119,7 @@ define(['app', 'lodash', 'RefreshingChart', 'DataLoader', 'ChartLoader', 'log/Ch
                                 preprocessData: subtype.preprocessMonthYearData,
                                 preprocessDataItems: subtype.preprocessMonthYearDataItems
                             },
-                            subtype.monthYearSeriesSuppliers(self.device.SwitchTypeVal)
+                            subtype.monthYearSeriesSuppliers(self.device.SwitchTypeVal, self.device.Divider)
                         )
                     );
                 }
@@ -156,7 +156,7 @@ define(['app', 'lodash', 'RefreshingChart', 'DataLoader', 'ChartLoader', 'log/Ch
                                 preprocessData: subtype.preprocessMonthYearData,
                                 preprocessDataItems: subtype.preprocessMonthYearDataItems
                             },
-                            subtype.monthYearSeriesSuppliers(self.device.SwitchTypeVal)
+                            subtype.monthYearSeriesSuppliers(self.device.SwitchTypeVal, self.device.Divider)
                         )
                     );
                 }
@@ -192,6 +192,8 @@ define(['app', 'lodash', 'RefreshingChart', 'DataLoader', 'ChartLoader', 'log/Ch
                                     return subtype.extendDataRequestCompare.call(self, dataRequest);
                                 },
                                 preprocessData: function (data) {
+									this.deviceCounterName = self.device.ValueQuantity;
+									
                                     if (subtype.preprocessCompareData !== undefined) {
                                         subtype.preprocessCompareData.call(self, data);
                                     }
@@ -207,6 +209,9 @@ define(['app', 'lodash', 'RefreshingChart', 'DataLoader', 'ChartLoader', 'log/Ch
 
                                     function categoriesFromGroupingBy(groupingBy) {
                                         if (groupingBy === 'year') {
+                                            if (this.firstYear === undefined) {
+                                                return [];
+                                            }
                                             return _.range(this.firstYear, new Date().getFullYear() + 1).map(year => year.toString());
                                         } else if (groupingBy === 'quarter') {
                                             return ['Q1', 'Q2', 'Q3', 'Q4'];

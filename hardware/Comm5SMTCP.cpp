@@ -1,7 +1,6 @@
 #include "stdafx.h"
 #include "Comm5SMTCP.h"
 #include "../main/Helper.h"
-#include "../main/localtime_r.h"
 #include "../main/Logger.h"
 #include "../main/mainworker.h"
 #include "../httpclient/HTTPClient.h"
@@ -14,11 +13,6 @@
 	The SM-1200 sensor provides: Temperature, Humidity, Barometric and Luminosity data.
 	https://www.comm5.com.br/en/sm-1200/
 */
-
-static inline std::string &rtrim(std::string &s) {
-	s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
-	return s;
-}
 
 static inline std::vector<std::string> tokenize(const std::string &s) {
 	std::vector<std::string> tokens;
@@ -118,7 +112,7 @@ void Comm5SMTCP::ParseData(const unsigned char* data, const size_t len)
 	std::string line;
 
 	while (std::getline(stream, line, '\n')) {
-		line = rtrim(line);
+		line = stdstring_rtrim(line);
 		if (startsWith(line, "280")) {
 			std::vector<std::string> tokens = tokenize(line);
 			if (tokens.size() < 2)

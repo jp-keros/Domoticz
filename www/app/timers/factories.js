@@ -52,9 +52,11 @@ define(['app'], function (app) {
                 hour: 0,
                 min: 0,
                 randomness: false,
+                persistent: false,
                 command: 0,
                 level: null,
-                tvalue: '',
+                tvalue: '123',
+				vunit: '',
                 days: 0x80,
                 color: '', // Empty string, intentionally illegal JSON
                 mday: 1,
@@ -110,6 +112,7 @@ define(['app'], function (app) {
         return {
             timerTypes: getTimerTypes(),
             command: getCommandOptions(),
+            blind_commands: getBlindOptions(),
             month: getMonthOptions(),
             monthday: getMonthdayOptions(),
             weekday: getWeekdayOptions(),
@@ -150,6 +153,13 @@ define(['app'], function (app) {
             return [
                 {label: $.t('On'), value: 0},
                 {label: $.t('Off'), value: 1},
+            ]
+        }
+
+        function getBlindOptions() {
+            return [
+                {label: $.t('Open'), value: 0},
+                {label: $.t('Close'), value: 1},
             ]
         }
 
@@ -233,7 +243,7 @@ define(['app'], function (app) {
         };
 
         function getTimers(deviceIdx) {
-            return domoticzApi.sendRequest({type: timerType + 's', idx: deviceIdx})
+            return domoticzApi.sendCommand('get' + timerType + 's', {idx: deviceIdx})
                 .then(function (data) {
                     return data.status === 'OK'
                         ? data.result || []

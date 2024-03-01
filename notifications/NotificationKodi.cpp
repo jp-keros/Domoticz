@@ -131,10 +131,9 @@ std::string CNotificationKodi::GetIconFile(const std::string &ExtraData)
 				break;
 			case STYPE_Blinds:
 			case STYPE_BlindsPercentage:
+			case STYPE_BlindsPercentageWithStop:
 			case STYPE_VenetianBlindsUS:
 			case STYPE_VenetianBlindsEU:
-			case STYPE_BlindsPercentageInverted:
-			case STYPE_BlindsInverted:
 				szTypeImage = "blinds48";
 				break;
 			case STYPE_X10Siren:

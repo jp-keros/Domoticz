@@ -4,7 +4,6 @@
 #include "../main/Logger.h"
 #include "../httpclient/UrlEncode.h"
 #include "hardwaretypes.h"
-#include "../main/localtime_r.h"
 #include "../httpclient/HTTPClient.h"
 #include "../main/json_helper.h"
 #include "../main/RFXtrx.h"
@@ -12,6 +11,11 @@
 #include <iostream>
 
 #define SE_VOLT_DC 20
+#define SE_POWERLIMIT 21
+#define SE_GROUND_RES 22
+#define SE_INV_MODE 23
+#define SE_AC_CURRENT 24
+#define SE_DATE 25
 
 #ifdef _DEBUG
 	//#define DEBUG_SolarEdgeAPIR_SITE
@@ -143,9 +147,13 @@ bool SolarEdgeAPI::GetSite()
 #ifdef DEBUG_SolarEdgeAPIR_SITE
 	sResult = ReadFile("E:\\SolarEdge_sites.json");
 #else
+
+	std::vector<std::string> ExtraHeaders;
+	ExtraHeaders.push_back("Accept: application/json");
+
 	std::stringstream sURL;
-	sURL << "https://monitoringapi.solaredge.com/sites/list?size=1&api_key=" << m_APIKey << "&format=application/json";
-	if (!HTTPClient::GET(sURL.str(), sResult))
+	sURL << "https://monitoringapi.solaredge.com/sites/list.json?size=1&api_key=" << m_APIKey;
+	if (!HTTPClient::GET(sURL.str(), ExtraHeaders, sResult))
 	{
 		Log(LOG_ERROR, "Error getting http data (Sites)!");
 		return false;
@@ -193,9 +201,13 @@ void SolarEdgeAPI::GetInverters()
 #ifdef DEBUG_SolarEdgeAPIR_INVERTERS
 	sResult = ReadFile("E:\\SolarEdge_inverters.json");
 #else
+
+	std::vector<std::string> ExtraHeaders;
+	ExtraHeaders.push_back("Accept: application/json");
+
 	std::stringstream sURL;
-	sURL << "https://monitoringapi.solaredge.com/equipment/" << m_SiteID << "/list?api_key=" << m_APIKey << "&format=application/json";
-	if (!HTTPClient::GET(sURL.str(), sResult))
+	sURL << "https://monitoringapi.solaredge.com/equipment/" << m_SiteID << "/list.json?api_key=" << m_APIKey;
+	if (!HTTPClient::GET(sURL.str(), ExtraHeaders, sResult))
 	{
 		Log(LOG_ERROR, "Error getting http data (Equipment)!");
 		return;
@@ -290,9 +302,13 @@ void SolarEdgeAPI::GetInverterDetails(const _tInverterSettings* pInverterSetting
 
 	sprintf(szTmp, "%04d-%02d-%02d %02d:%02d:%02d", ltime.tm_year + 1900, ltime.tm_mon + 1, ltime.tm_mday, ltime.tm_hour, ltime.tm_min, ltime.tm_sec);
 	std::string endDate = CURLEncode::URLEncode(szTmp);
+
+	std::vector<std::string> ExtraHeaders;
+	ExtraHeaders.push_back("Accept: application/json");
+
 	std::stringstream sURL;
-	sURL << "https://monitoringapi.solaredge.com/equipment/" << m_SiteID << "/" << pInverterSettings->SN << "/data.json?startTime=" << startDate << "&endTime=" << endDate << "&api_key=" << m_APIKey << "&format=application/json";
-	if (!HTTPClient::GET(sURL.str(), sResult))
+	sURL << "https://monitoringapi.solaredge.com/equipment/" << m_SiteID << "/" << pInverterSettings->SN << "/data.json?startTime=" << startDate << "&endTime=" << endDate << "&api_key=" << m_APIKey;
+	if (!HTTPClient::GET(sURL.str(), ExtraHeaders, sResult))
 	{
 		Log(LOG_ERROR, "Error getting http data (Equipment details)!");
 		return;
@@ -348,6 +364,28 @@ void SolarEdgeAPI::GetInverterDetails(const _tInverterSettings* pInverterSetting
 		sprintf(szTmp, "DC %s", pInverterSettings->name.c_str());
 		SendVoltageSensor(iInverterNumber, SE_VOLT_DC, 255, dcVoltage, szTmp);
 	}
+	if (!reading["powerLimit"].empty())
+	{
+		float powerLimit = reading["powerLimit"].asFloat();
+		sprintf(szTmp, "powerLimit %s", pInverterSettings->name.c_str());
+		SendPercentageSensor(iInverterNumber, SE_POWERLIMIT, 255, powerLimit, szTmp);
+	}
+	if (!reading["groundFaultResistance"].empty())
+	{
+		float groundFaultResistance = reading["groundFaultResistance"].asFloat();
+		sprintf(szTmp, "groundFaultResistance %s", pInverterSettings->name.c_str());
+		SendCustomSensor(iInverterNumber, SE_GROUND_RES, 255, groundFaultResistance, szTmp, "kOhm");
+	}
+	if (!reading["inverterMode"].empty())
+	{
+		sprintf(szTmp, "inverterMode %s", pInverterSettings->name.c_str());
+		SendTextSensor(iInverterNumber, SE_INV_MODE, 255, reading["inverterMode"].asString(), szTmp);
+	}
+	if (!reading["date"].empty())
+	{
+		sprintf(szTmp, "date %s", pInverterSettings->name.c_str());
+		SendTextSensor(iInverterNumber, SE_DATE, 255, reading["date"].asString(), szTmp);
+	}
 	if (!reading["temperature"].empty())
 	{
 		float temp = reading["temperature"].asFloat();
@@ -374,6 +412,13 @@ void SolarEdgeAPI::GetInverterDetails(const _tInverterSettings* pInverterSetting
 				sprintf(szTmp, "Hz L%d %s", iPhase, pInverterSettings->name.c_str());
 				SendCustomSensor(1 + iInverterNumber, iPhase, 255, acFrequency, szTmp, "Hz");
 			}
+			if (!reading[szPhase]["acCurrent"].empty())
+			{
+				float acCurrent = reading[szPhase]["acCurrent"].asFloat();
+				sprintf(szTmp, "acCurrent L%d %s", iPhase, pInverterSettings->name.c_str());
+				SendCustomSensor(iInverterNumber, SE_AC_CURRENT + ii, 255, acCurrent, szTmp, "A");
+			}
+
 			if (!reading[szPhase]["activePower"].empty())
 			{
 				float ActivePower = reading[szPhase]["activePower"].asFloat();

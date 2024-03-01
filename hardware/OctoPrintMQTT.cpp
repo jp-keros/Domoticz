@@ -3,7 +3,6 @@
 #include "../main/Logger.h"
 #include "../main/Helper.h"
 #include <iostream>
-#include "../main/localtime_r.h"
 #include "../main/mainworker.h"
 #include "../main/SQLHelper.h"
 #include "../main/json_helper.h"
@@ -276,7 +275,7 @@ void COctoPrintMQTT::SendMessage(const std::string &Topic, const std::string &Me
 			Log(LOG_STATUS, "Not Connected, failed to send message: %s", Message.c_str());
 			return;
 		}
-		publish(nullptr, Topic.c_str(), Message.size(), Message.c_str());
+		publish(nullptr, Topic.c_str(), (int)Message.size(), Message.c_str());
 	}
 	catch (...)
 	{
@@ -295,7 +294,7 @@ void COctoPrintMQTT::WriteInt(const std::string &sendStr)
 
 void COctoPrintMQTT::UpdateUserVariable(const std::string &varName, const std::string &varValue)
 {
-	std::string szLastUpdate = TimeToString(nullptr, TF_DateTime);
+	std::string sLastUpdate = TimeToString(nullptr, TF_DateTime);
 
 	int ID;
 
@@ -312,11 +311,11 @@ void COctoPrintMQTT::UpdateUserVariable(const std::string &varName, const std::s
 	else
 	{
 		ID = atoi(result[0][0].c_str());
-		m_sql.safe_query("UPDATE UserVariables SET Value='%q', LastUpdate='%q' WHERE (ID==%d)", varValue.c_str(), szLastUpdate.c_str(), ID);
+		m_sql.safe_query("UPDATE UserVariables SET Value='%q', LastUpdate='%q' WHERE (ID==%d)", varValue.c_str(), sLastUpdate.c_str(), ID);
 	}
 
 	m_mainworker.m_eventsystem.SetEventTrigger(ID, m_mainworker.m_eventsystem.REASON_USERVARIABLE, 0);
-	m_mainworker.m_eventsystem.UpdateUserVariable(ID, varValue, szLastUpdate);
+	m_mainworker.m_eventsystem.UpdateUserVariable(ID, varName, (int)USERVARTYPE_STRING, varValue, sLastUpdate);
 }
 
 

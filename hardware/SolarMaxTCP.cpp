@@ -3,7 +3,6 @@
 #include "../main/Logger.h"
 #include "../main/Helper.h"
 #include <iostream>
-#include "../main/localtime_r.h"
 #include "../main/mainworker.h"
 
 #include "../main/SQLHelper.h"
@@ -212,7 +211,7 @@ void SolarMaxTCP::write(const char *data, size_t size)
 {
 	if (m_socket == INVALID_SOCKET)
 		return; //not connected!
-	send(m_socket, data, size, 0);
+	send(m_socket, data, (int)size, 0);
 }
 
 bool SolarMaxTCP::WriteToHardware(const char *pdata, const unsigned char length)

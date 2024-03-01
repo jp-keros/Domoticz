@@ -37,6 +37,7 @@ option(USE_OPENSSL_STATIC "Link OpenSSL static" NO)
 option(USE_STATIC_BOOST "Build with static BOOST libraries" YES)
 option(USE_STATIC_OPENZWAVE "Build with static OpenZwave libraries" YES)
 
+
 # Developer-oriented options
 option(USE_PRECOMPILED_HEADER "Use precompiled header feature to speed up build time " YES)
 option(GIT_SUBMODULE "Check submodules during build" ON)
@@ -64,6 +65,7 @@ IF(CMAKE_COMPILER_IS_GNUCXX)
   #SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-switch")
   #ADD_DEFINITIONS( -Wall -O0 -ggdb )
   #ADD_DEFINITIONS( -Wfatal-errors -Wformat=2 -Werror=format-security )
+  ADD_DEFINITIONS( -D_FILE_OFFSET_BITS=64 )
 ENDIF()
 
 ### VERSIONING SUPPORT
@@ -164,13 +166,18 @@ main/SQLHelper.cpp
 main/SunRiseSet.cpp
 main/TrendCalculator.cpp
 main/WebServer.cpp
+main/WebServerCmds.cpp
+main/WebServerCommands.cpp
+main/WebServerHandleGraph.cpp
 main/WebServerHelper.cpp
 main/WindCalculation.cpp
+iamserver/IamService.cpp
 push/BasePush.cpp
 push/FibaroPush.cpp
 push/GooglePubSubPush.cpp
 push/HttpPush.cpp
 push/InfluxPush.cpp
+push/MQTTPush.cpp
 push/WebsocketPush.cpp
 httpclient/HTTPClient.cpp
 httpclient/UrlEncode.cpp
@@ -181,6 +188,7 @@ hardware/1Wire/1WireCommon.cpp
 hardware/1Wire/1WireForWindows.cpp
 hardware/AccuWeather.cpp
 hardware/AirconWithMe.cpp
+hardware/AlfenEve.cpp
 hardware/AnnaThermostat.cpp
 hardware/Arilux.cpp
 hardware/ASyncSerial.cpp
@@ -193,6 +201,7 @@ hardware/ColorSwitch.cpp
 hardware/Comm5Serial.cpp
 hardware/Comm5SMTCP.cpp
 hardware/Comm5TCP.cpp
+hardware/CounterHelper.cpp
 hardware/csocket.cpp
 hardware/CurrentCostMeterBase.cpp
 hardware/CurrentCostMeterSerial.cpp
@@ -213,8 +222,11 @@ hardware/eHouseTCP.cpp
 hardware/eHouse/EhouseEvents.cpp
 hardware/eHouse/EhouseTcpClient.cpp
 hardware/eHouse/EhouseUdpListener.cpp
+hardware/Enever.cpp
+hardware/EnOceanEEP.cpp
 hardware/EnOceanESP2.cpp
 hardware/EnOceanESP3.cpp
+hardware/EnOceanRawValue.cpp
 hardware/EnphaseAPI.cpp
 hardware/Ec3kMeterTCP.cpp
 hardware/eVehicles/TeslaApi.cpp
@@ -229,7 +241,6 @@ hardware/EvohomeTCP.cpp
 hardware/EvohomeWeb.cpp
 hardware/ETH8020.cpp
 hardware/FritzboxTCP.cpp
-hardware/GoodweAPI.cpp
 hardware/Gpio.cpp
 hardware/GpioPin.cpp
 hardware/HardwareMonitor.cpp
@@ -249,8 +260,10 @@ hardware/Limitless.cpp
 hardware/LogitechMediaServer.cpp
 hardware/Meteorologisk.cpp
 hardware/Meteostick.cpp
+hardware/MitsubishiWF.cpp
 hardware/MochadTCP.cpp
 hardware/MQTT.cpp
+hardware/MQTTAutoDiscover.cpp
 hardware/MultiFun.cpp
 hardware/MySensorsBase.cpp
 hardware/MySensorsSerial.cpp
@@ -289,6 +302,7 @@ hardware/RelayNet.cpp
 hardware/RFLinkBase.cpp
 hardware/RFLinkSerial.cpp
 hardware/RFLinkTCP.cpp
+hardware/RFLinkMQTT.cpp
 hardware/RFXBase.cpp
 hardware/RFXComSerial.cpp
 hardware/RFXComTCP.cpp
@@ -305,7 +319,6 @@ hardware/SolarMaxTCP.cpp
 hardware/Sterbox.cpp
 hardware/SysfsGpio.cpp
 hardware/Tado.cpp
-hardware/TCPProxy/tcpproxy_server.cpp
 hardware/TE923.cpp
 hardware/TE923Tool.cpp
 hardware/TeleinfoBase.cpp
@@ -318,6 +331,7 @@ hardware/ToonThermostat.cpp
 hardware/TTNMQTT.cpp
 hardware/USBtin.cpp
 hardware/USBtin_MultiblocV8.cpp
+hardware/VisualCrossing.cpp
 hardware/VolcraftCO20.cpp
 hardware/Winddelen.cpp
 hardware/WOL.cpp
@@ -336,6 +350,7 @@ hardware/plugins/PluginManager.cpp
 hardware/plugins/PluginProtocols.cpp
 hardware/plugins/PluginTransports.cpp
 hardware/plugins/PythonObjects.cpp
+hardware/plugins/PythonObjectEx.cpp
 notifications/NotificationBase.cpp
 notifications/NotificationBrowser.cpp
 notifications/NotificationEmail.cpp
@@ -360,8 +375,6 @@ webserver/connection_manager.cpp
 webserver/cWebem.cpp
 webserver/fastcgi.cpp
 webserver/mime_types.cpp
-webserver/proxycereal.cpp
-webserver/proxyclient.cpp
 webserver/reply.cpp
 webserver/request_handler.cpp
 webserver/request_parser.cpp
@@ -390,6 +403,28 @@ add_executable(domoticz ${domoticz_SRCS})
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 #SET(EXECUTABLE_OUTPUT_PATH "" CACHE INTERNAL "Where to put the executables for Domoticz")
 
+# Target
+set(
+domoticztester_SRCS
+main/stdafx.cpp
+main/Helper.cpp
+main/CmdLine.cpp
+main/domoticz_tester.cpp
+main/BaroForecastCalculator.cpp
+main/HTMLSanitizer.cpp
+main/localtime_r.cpp
+main/SunRiseSet.cpp
+main/TrendCalculator.cpp
+main/WindCalculation.cpp
+main/json_helper.cpp
+hardware/ColorSwitch.cpp
+)
+
+#main/IFTTT.cpp
+
+add_executable(domoticztester ${domoticztester_SRCS})
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
+
 #
 # LUA
 #
@@ -415,15 +450,14 @@ ELSE(LUA_LIBRARIES AND LUA_INCLUDE_DIRS)
 ENDIF(LUA_LIBRARIES AND LUA_INCLUDE_DIRS)
 
 IF(USE_PYTHON)
-  find_package(PythonInterp 3.4)
-  find_package(PythonLibs 3.4)
-  IF(PYTHONLIBS_FOUND)
-    MESSAGE(STATUS "Python3 includes found at: ${PYTHON_INCLUDE_PATH}")
-    INCLUDE_DIRECTORIES(${PYTHON_INCLUDE_PATH})
+  find_package(Python3 3.4 COMPONENTS Development)
+  IF(Python3_Development_FOUND)
+    MESSAGE(STATUS "Python3 version ${Python3_VERSION} includes found at: ${Python3_INCLUDE_DIRS}")
+    INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
     add_definitions(-DENABLE_PYTHON)
-  ELSE(PYTHONLIBS_FOUND)
+  ELSE(Python3_Development_FOUND)
     MESSAGE(FATAL_ERROR "Python3 not found on your system, use USE_PYTHON=NO or sudo apt-get install python3-dev)")
-  ENDIF(PYTHONLIBS_FOUND)
+  ENDIF(Python3_Development_FOUND)
 ENDIF(USE_PYTHON)
 
 CHECK_INCLUDE_FILE (execinfo.h HAVE_EXECINFO_H)
@@ -489,6 +523,7 @@ set (domoticz_VERSION_PATCH ${ProjectRevision})
 
 # explicitly say that the executable depends on the revisiontag
 add_dependencies(domoticz revisiontag)
+add_dependencies(domoticztester revisiontag)
 
 TEST_BIG_ENDIAN(BIGENDIAN)
 IF(${BIGENDIAN})
@@ -508,6 +543,7 @@ IF(USE_BUILTIN_JSONCPP)
   set(JSONCPP_WITH_PKGCONFIG_SUPPORT OFF CACHE BOOL "Enable jsoncpp pkgconfig support" FORCE)
   add_subdirectory (extern/jsoncpp EXCLUDE_FROM_ALL)
   target_link_libraries(domoticz jsoncpp_static)
+  target_link_libraries(domoticztester jsoncpp_static)
   INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/extern/jsoncpp/include)
 ELSE(USE_BUILTIN_JSONCPP)
   find_package(PkgConfig)
@@ -517,11 +553,14 @@ ELSE(USE_BUILTIN_JSONCPP)
     target_include_directories(domoticz PRIVATE ${JSONCPP_INCLUDE_DIRS})
     target_link_directories(domoticz PRIVATE ${JSONCPP_LIBRARY_DIRS})
     target_link_libraries(domoticz ${JSONCPP_LIBRARIES})
+    target_include_directories(domoticztester PRIVATE ${JSONCPP_INCLUDE_DIRS})
+    target_link_directories(domoticztester PRIVATE ${JSONCPP_LIBRARY_DIRS})
+    target_link_libraries(domoticztester ${JSONCPP_LIBRARIES})
   ELSE(JSONCPP_FOUND)
     MESSAGE(FATAL_ERROR "JSONCPP not found on your system! try 'sudo apt-get install jsoncpp-dev'")
   ENDIF(JSONCPP_FOUND)
 ENDIF(USE_BUILTIN_JSONCPP)
-
+ 
 # mosquitto
 IF(USE_BUILTIN_MQTT)
   MESSAGE(STATUS "Using builtin Mosquitto library")
@@ -529,6 +568,7 @@ IF(USE_BUILTIN_MQTT)
   option(DOCUMENTATION "Build documentation?" OFF)
   add_subdirectory (extern/mosquitto EXCLUDE_FROM_ALL)
   target_link_libraries(domoticz libmosquitto_static)
+  target_link_libraries(domoticztester libmosquitto_static)
   INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/extern/mosquitto/include)
   INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/extern/mosquitto/lib)
 ELSE(USE_BUILTIN_MQTT)
@@ -547,6 +587,7 @@ IF(USE_BUILTIN_SQLITE)
   MESSAGE(STATUS "Using builtin SQLite library")
   add_subdirectory (extern/sqlite-amalgamation EXCLUDE_FROM_ALL)
   target_link_libraries(domoticz SQLite3)
+  target_link_libraries(domoticztester SQLite3)
   INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/extern/sqlite-amalgamation)
 ELSE(USE_BUILTIN_SQLITE)
   find_package(SQLite3)
@@ -555,6 +596,7 @@ ELSE(USE_BUILTIN_SQLITE)
     MESSAGE(STATUS "SQLite includes found at: ${SQLite3_INCLUDE_DIRS}")
     INCLUDE_DIRECTORIES(${SQLite3_INCLUDE_DIRS})
     target_link_libraries(domoticz ${SQLite3_LIBRARIES})
+    target_link_libraries(domoticztester ${SQLite3_LIBRARIES})
   ELSE(SQLite3_FOUND)
     MESSAGE(FATAL_ERROR "SQLite3 not found on your system! try 'sudo apt-get install libsqlite3-dev'")
   ENDIF(SQLite3_FOUND)
@@ -564,6 +606,7 @@ ENDIF(USE_BUILTIN_SQLITE)
 IF(USE_BUILTIN_MINIZIP)
   add_subdirectory (extern/minizip EXCLUDE_FROM_ALL)
   target_link_libraries(domoticz minizip)
+  target_link_libraries(domoticztester minizip)
   INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/extern/minizip)
 ELSE(USE_BUILTIN_MINIZIP)
   find_package(PkgConfig)
@@ -573,6 +616,9 @@ ELSE(USE_BUILTIN_MINIZIP)
     target_include_directories(domoticz PRIVATE ${MINIZIP_INCLUDE_DIRS})
     target_link_directories(domoticz PRIVATE ${MINIZIP_LIBRARY_DIRS})
     target_link_libraries(domoticz ${MINIZIP_LIBRARIES})
+    target_include_directories(domoticztester PRIVATE ${MINIZIP_INCLUDE_DIRS})
+    target_link_directories(domoticztester PRIVATE ${MINIZIP_LIBRARY_DIRS})
+    target_link_libraries(domoticztester ${MINIZIP_LIBRARIES})
   ELSE(MINIZIP_FOUND)
     MESSAGE(FATAL_ERROR "MINIZIP not found on your system! try 'sudo apt-get install minizip-dev'")
   ENDIF(MINIZIP_FOUND)
@@ -594,6 +640,7 @@ IF(NOT OPENSSL_FOUND)
   find_library(MD_LIBRARY NAMES md)
   IF(MD_LIBRARY)
     target_link_libraries(domoticz ${MD_LIBRARY})
+    target_link_libraries(domoticztester ${MD_LIBRARY})
   ENDIF(MD_LIBRARY)
 ELSE()
   message(STATUS "OPENSSL library found at: ${OPENSSL_LIBRARIES}")
@@ -601,6 +648,7 @@ ELSE()
   add_definitions(-DWITH_TLS)
   include_directories(${OPENSSL_INCLUDE_DIR})
   target_link_libraries(domoticz ${OPENSSL_LIBRARIES})
+  target_link_libraries(domoticztester ${OPENSSL_LIBRARIES})
 ENDIF()
 
 #
@@ -741,6 +789,7 @@ ELSE()
 ENDIF(TELLDUSCORE_INCLUDE)
 
 target_link_libraries(domoticz ${Boost_LIBRARIES} ${ZLIB_LIBRARIES} ${MINIZIP_LIBRARIES} ${CURL_LIBRARIES} pthread ${MQTT_LIBRARIES} ${LUA_LIBRARIES} ${CMAKE_DL_LIBS} ${TELLDUS_LIBRARIES})
+target_link_libraries(domoticztester ${Boost_LIBRARIES} ${ZLIB_LIBRARIES} ${MINIZIP_LIBRARIES} ${CURL_LIBRARIES} pthread ${MQTT_LIBRARIES} ${LUA_LIBRARIES} ${CMAKE_DL_LIBS} ${TELLDUS_LIBRARIES})
 
 IF(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   target_link_libraries(domoticz -lresolv)
@@ -750,11 +799,13 @@ ELSEIF(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
   target_link_libraries(domoticz ${EXECINFO_LIBRARIES})
 ELSE()
   target_link_libraries(domoticz -lrt -lresolv ${EXECINFO_LIBRARIES})
+  target_link_libraries(domoticztester -lrt -lresolv ${EXECINFO_LIBRARIES})
 ENDIF()
 
 IF(USE_PRECOMPILED_HEADER)
   message(STATUS "Using precompiled headers")
   target_precompile_headers(domoticz PRIVATE "main/stdafx.h")
+  target_precompile_headers(domoticztester PRIVATE "main/stdafx.h")
 ENDIF(USE_PRECOMPILED_HEADER)
 
 IF(CMAKE_COMPILER_IS_GNUCXX)
@@ -807,6 +858,5 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/History.txt DESTINATION ${CMAKE_INSTAL
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/server_cert.pem DESTINATION ${CMAKE_INSTALL_PREFIX})
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts DESTINATION ${CMAKE_INSTALL_PREFIX} USE_SOURCE_PERMISSIONS)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/plugins DESTINATION ${CMAKE_INSTALL_PREFIX})
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Config DESTINATION ${CMAKE_INSTALL_PREFIX})
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/dzVents DESTINATION ${CMAKE_INSTALL_PREFIX})
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/updatedomo DESTINATION ${CMAKE_INSTALL_PREFIX} PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ)

@@ -3,10 +3,10 @@
 #include "../main/Logger.h"
 #include "../main/Helper.h"
 #include <iostream>
-#include "../main/localtime_r.h"
 #include "../main/mainworker.h"
 #include "../main/SQLHelper.h"
 #include "../main/json_helper.h"
+#include "../main/WebServer.h"
 #include "../notifications/NotificationHelper.h"
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -19,6 +19,8 @@
 #define QOS 1
 #define RETAIN_BIT 0x80
 
+extern std::string szCertFile;
+
 namespace
 {
 	constexpr std::array<const char *, 3> szTLSVersions{
@@ -27,6 +29,13 @@ namespace
 		"tlsv1.2", //
 	};
 } // namespace
+
+MQTT::MQTT()
+{
+	mosqdz::lib_init();
+	threaded_set(true);
+	m_bPreventLoop = true;
+}
 
 MQTT::MQTT(const int ID, const std::string &IPAddress, const unsigned short usIPPort, const std::string &Username, const std::string &Password, const std::string &CAfilenameExtra,
 	   const int TLS_Version, const int PublishScheme, const std::string &MQTTClientID, const bool PreventLoop)
@@ -37,8 +46,6 @@ MQTT::MQTT(const int ID, const std::string &IPAddress, const unsigned short usIP
 	, m_CAFilename(CAfilenameExtra)
 {
 	m_HwdID = ID;
-	m_IsConnected = false;
-	m_bDoReconnect = false;
 	mosqdz::lib_init();
 
 	m_usIPPort = usIPPort;
@@ -46,16 +53,17 @@ MQTT::MQTT(const int ID, const std::string &IPAddress, const unsigned short usIP
 	m_publish_scheme = (_ePublishTopics)(PublishScheme & ~RETAIN_BIT);
 	Debug(DEBUG_HARDWARE, "MQTT PublishSchema %d (%d), Retain %d", m_publish_scheme, PublishScheme, m_bRetain);
 
-	m_TopicIn = TOPIC_IN;
-	m_TopicOut = TOPIC_OUT;
-
 	std::vector<std::string> strarray;
 	StringSplit(CAfilenameExtra, ";", strarray);
-	if (strarray.size() > 1)
+	if (!strarray.empty())
 	{
 		m_CAFilename = strarray[0];
-		if (!strarray[1].empty())
-			m_TopicIn = strarray[1];
+
+		if (strarray.size() > 1)
+		{
+			if (!strarray[1].empty())
+				m_TopicIn = strarray[1];
+		}
 		if (strarray.size() > 2)
 		{
 			if (!strarray[2].empty())
@@ -77,6 +85,11 @@ MQTT::~MQTT()
 
 bool MQTT::StartHardware()
 {
+	if (m_szIPAddress.empty())
+		return false;
+
+	ReloadSharedDevices();
+
 	RequestStart();
 
 	// force connect the next first time
@@ -102,6 +115,7 @@ void MQTT::StopMQTT()
 
 bool MQTT::StopHardware()
 {
+	on_going_down();
 	StopHeartbeatThread();
 	if (m_thread)
 	{
@@ -115,7 +129,7 @@ bool MQTT::StopHardware()
 
 void MQTT::on_subscribe(int /*mid*/, int /*qos_count*/, const int * /*granted_qos*/)
 {
-	Log(LOG_STATUS, "MQTT: Subscribed");
+	//Log(LOG_STATUS, "Subscribed");
 	m_IsConnected = true;
 }
 
@@ -132,7 +146,7 @@ void MQTT::on_log(int level, const char *str)
 		default:
 			llevel = LOG_ERROR;
 	}
-	Log(llevel, "MQTT: %s", str);
+	Log(llevel, "%s", str);
 }
 
 void MQTT::on_error()
@@ -152,21 +166,24 @@ void MQTT::on_connect(int rc)
 	{
 		if (m_IsConnected)
 		{
-			Log(LOG_STATUS, "MQTT: re-connected to: %s:%d", m_szIPAddress.c_str(), m_usIPPort);
+			Log(LOG_STATUS, "re-connected to: %s:%d", m_szIPAddress.c_str(), m_usIPPort);
 		}
 		else
 		{
-			Log(LOG_STATUS, "MQTT: connected to: %s:%d", m_szIPAddress.c_str(), m_usIPPort);
+			Log(LOG_STATUS, "connected to: %s:%d", m_szIPAddress.c_str(), m_usIPPort);
 			m_IsConnected = true;
 			sOnConnected(this);
 			m_sDeviceReceivedConnection = m_mainworker.sOnDeviceReceived.connect([this](auto id, auto idx, auto &&name, auto cmd) { SendDeviceInfo(id, idx, name, cmd); });
 			m_sSwitchSceneConnection = m_mainworker.sOnSwitchScene.connect([this](auto scene, auto &&name) { SendSceneInfo(scene, name); });
 		}
-		subscribe(nullptr, m_TopicIn.c_str());
+		if (!m_TopicIn.empty())
+			SubscribeTopic(m_TopicIn.c_str());
+		else
+			Log(LOG_STATUS, "Default input topic disabled in settings...");
 	}
 	else
 	{
-		Log(LOG_ERROR, "MQTT: Connection failed!, restarting (rc=%d)", rc);
+		Log(LOG_ERROR, "Connection failed!, restarting (rc=%d)", rc);
 		m_bDoReconnect = true;
 	}
 }
@@ -174,14 +191,11 @@ void MQTT::on_connect(int rc)
 void MQTT::on_message(const struct mosquitto_message *message)
 {
 	std::string topic = message->topic;
-	std::string qMessage = std::string((char *)message->payload, (char *)message->payload + message->payloadlen);
+	std::string qMessage = std::string((char*)message->payload, (char*)message->payload + message->payloadlen);
 
-	Debug(DEBUG_HARDWARE, "MQTT: Topic: %s, Message: %s", topic.c_str(), qMessage.c_str());
-
+	Debug(DEBUG_HARDWARE, "Topic: %s, Message: %s", topic.c_str(), qMessage.c_str());
+	
 	if (qMessage.empty())
-		return;
-
-	if (topic != m_TopicIn)
 		return;
 
 	Json::Value root;
@@ -206,10 +220,10 @@ void MQTT::on_message(const struct mosquitto_message *message)
 		{
 			idx = (uint64_t)root["idx"].asInt64();
 			// Get the raw device parameters
-			result = m_sql.safe_query("SELECT HardwareID, DeviceID, Unit, Type, SubType FROM DeviceStatus WHERE (ID==%" PRIu64 ")", idx);
+			result = m_sql.safe_query("SELECT HardwareID, OrgHardwareID, DeviceID, Unit, Type, SubType FROM DeviceStatus WHERE (ID==%" PRIu64 ")", idx);
 			if (result.empty())
 			{
-				Log(LOG_ERROR, "MQTT: unknown idx received! (idx %" PRIu64 ")", idx);
+				Log(LOG_ERROR, "unknown idx received! (idx %" PRIu64 ")", idx);
 				return;
 			}
 		}
@@ -219,7 +233,7 @@ void MQTT::on_message(const struct mosquitto_message *message)
 			result = m_sql.safe_query("SELECT Name FROM Scenes WHERE (ID==%" PRIu64 ")", idx);
 			if (result.empty())
 			{
-				Log(LOG_ERROR, "MQTT: unknown idx received! (idx %" PRIu64 ")", idx);
+				Log(LOG_ERROR, "unknown idx received! (idx %" PRIu64 ")", idx);
 				return;
 			}
 		}
@@ -229,7 +243,7 @@ void MQTT::on_message(const struct mosquitto_message *message)
 			result = m_sql.safe_query("SELECT Name, ValueType FROM UserVariables WHERE (ID==%" PRIu64 ")", idx);
 			if (result.empty())
 			{
-				Log(LOG_ERROR, "MQTT: unknown idx received! (idx %" PRIu64 ")", idx);
+				Log(LOG_ERROR, "unknown idx received! (idx %" PRIu64 ")", idx);
 				return;
 			}
 		}
@@ -238,10 +252,11 @@ void MQTT::on_message(const struct mosquitto_message *message)
 		if (szCommand == "udevice")
 		{
 			int HardwareID = atoi(result[0][0].c_str());
-			std::string DeviceID = result[0][1];
-			int unit = atoi(result[0][2].c_str());
-			int devType = atoi(result[0][3].c_str());
-			int subType = atoi(result[0][4].c_str());
+			int OrgHardwareID = atoi(result[0][1].c_str());
+			std::string DeviceID = result[0][2];
+			int unit = atoi(result[0][3].c_str());
+			int devType = atoi(result[0][4].c_str());
+			int subType = atoi(result[0][5].c_str());
 
 			bool bnvalue = !root["nvalue"].empty();
 			bool bsvalue = !root["svalue"].empty();
@@ -286,9 +301,9 @@ void MQTT::on_message(const struct mosquitto_message *message)
 			// Prevent MQTT update being send to client after next update
 			m_LastUpdatedDeviceRowIdx = idx;
 
-			if (!m_mainworker.UpdateDevice(HardwareID, DeviceID, unit, devType, subType, nvalue, svalue, m_Name, signallevel, batterylevel, bParseTrigger))
+			if (!m_mainworker.UpdateDevice(HardwareID, OrgHardwareID, DeviceID, unit, devType, subType, nvalue, svalue, m_Name, signallevel, batterylevel, bParseTrigger))
 			{
-				Log(LOG_ERROR, "MQTT: Problem updating sensor (check idx, hardware enabled)");
+				Log(LOG_ERROR, "Problem updating sensor (check idx, hardware enabled)");
 				return;
 			}
 			return;
@@ -296,9 +311,12 @@ void MQTT::on_message(const struct mosquitto_message *message)
 		if (szCommand == "switchlight")
 		{
 			std::string switchcmd = root["switchcmd"].asString();
+			std::string onlyonchange("");
+			if (!root["ooc"].empty())
+				onlyonchange = root["ooc"].asString();
 			// if ((switchcmd != "On") && (switchcmd != "Off") && (switchcmd != "Toggle") && (switchcmd != "Set Level") && (switchcmd != "Stop"))
 			//	goto mqttinvaliddata;
-			int level = 0;
+			int level = -1;
 			if (!root["level"].empty())
 			{
 				if (root["level"].isString())
@@ -309,10 +327,11 @@ void MQTT::on_message(const struct mosquitto_message *message)
 
 			// Prevent MQTT update being send to client after next update
 			m_LastUpdatedDeviceRowIdx = idx;
+			const bool bIsOOC = atoi(onlyonchange.c_str()) != 0;
 
-			if (!m_mainworker.SwitchLight(idx, switchcmd, level, NoColor, false, 0, "MQTT") == true)
+			if (m_mainworker.SwitchLight(idx, switchcmd, level, NoColor, bIsOOC, 0, "MQTT") == MainWorker::SL_ERROR)
 			{
-				Log(LOG_ERROR, "MQTT: Error sending switch command!");
+				Log(LOG_ERROR, "Error sending switch command!");
 			}
 		}
 		else if (szCommand == "setcolbrightnessvalue")
@@ -353,12 +372,12 @@ void MQTT::on_message(const struct mosquitto_message *message)
 					color.b = (uint8_t)b;
 					brightnessAdj = hsb[2];
 				}
-				// Debug(DEBUG_NORM, "MQTT: setcolbrightnessvalue: color: '%s', bri: '%s'", color.toString().c_str(), brightness.c_str());
+				// Debug(DEBUG_NORM, "setcolbrightnessvalue: color: '%s', bri: '%s'", color.toString().c_str(), brightness.c_str());
 			}
 			else if (!hex.empty())
 			{
 				uint64_t ihex = hexstrtoui64(hex);
-				// Debug(DEBUG_NORM, "MQTT: setcolbrightnessvalue: hex: '%s', ihex: %" PRIx64 ", bri: '%s', iswhite: '%s'", hex.c_str(), ihex, brightness.c_str(), iswhite.c_str());
+				// Debug(DEBUG_NORM, "setcolbrightnessvalue: hex: '%s', ihex: %" PRIx64 ", bri: '%s', iswhite: '%s'", hex.c_str(), ihex, brightness.c_str(), iswhite.c_str());
 				uint8_t r = 0;
 				uint8_t g = 0;
 				uint8_t b = 0;
@@ -401,7 +420,7 @@ void MQTT::on_message(const struct mosquitto_message *message)
 				}
 				if (iswhite == "true")
 					color.mode = ColorModeWhite;
-				// Debug(DEBUG_NORM, "MQTT: setcolbrightnessvalue: trgbww: %02x%02x%02x%02x%02x, color: '%s'", r, g, b, cw, ww, color.toString().c_str());
+				// Debug(DEBUG_NORM, "setcolbrightnessvalue: trgbww: %02x%02x%02x%02x%02x, color: '%s'", r, g, b, cw, ww, color.toString().c_str());
 			}
 			else if (!hue.empty())
 			{
@@ -417,7 +436,7 @@ void MQTT::on_message(const struct mosquitto_message *message)
 				color = _tColor((uint8_t)r, (uint8_t)g, (uint8_t)b, 0, 0, ColorModeRGB);
 				if (iswhite == "true")
 					color.mode = ColorModeWhite;
-				// Debug(DEBUG_NORM, "MQTT: setcolbrightnessvalue2: hue: %f, rgb: %02x%02x%02x, color: '%s'", iHue, r, g, b, color.toString().c_str());
+				// Debug(DEBUG_NORM, "setcolbrightnessvalue2: hue: %f, rgb: %02x%02x%02x, color: '%s'", iHue, r, g, b, color.toString().c_str());
 			}
 
 			if (color.mode == ColorModeNone)
@@ -431,14 +450,14 @@ void MQTT::on_message(const struct mosquitto_message *message)
 			ival = std::max(ival, 0);
 			ival = std::min(ival, 100);
 
-			Log(LOG_STATUS, "MQTT: setcolbrightnessvalue: ID: %" PRIx64 ", bri: %d, color: '%s'", idx, ival, color.toString().c_str());
+			Log(LOG_STATUS, "setcolbrightnessvalue: ID: %" PRIx64 ", bri: %d, color: '%s'", idx, ival, color.toString().c_str());
 
 			// Prevent MQTT update being send to client after next update
 			m_LastUpdatedDeviceRowIdx = idx;
 
-			if (!m_mainworker.SwitchLight(idx, "Set Color", ival, color, false, 0, "MQTT") == true)
+			if (m_mainworker.SwitchLight(idx, "Set Color", ival, color, false, 0, "MQTT") == MainWorker::SL_ERROR)
 			{
-				Log(LOG_ERROR, "MQTT: Error sending switch command!");
+				Log(LOG_ERROR, "Error sending switch command!");
 			}
 		}
 		else if (szCommand == "switchscene")
@@ -452,7 +471,7 @@ void MQTT::on_message(const struct mosquitto_message *message)
 
 			if (!m_mainworker.SwitchScene(idx, switchcmd, "MQTT") == true)
 			{
-				Log(LOG_ERROR, "MQTT: Error sending scene command!");
+				Log(LOG_ERROR, "Error sending scene command!");
 			}
 		}
 		else if (szCommand == "setuservariable")
@@ -467,7 +486,7 @@ void MQTT::on_message(const struct mosquitto_message *message)
 			std::string errorMessage;
 			if (!m_sql.UpdateUserVariable(root["idx"].asString(), sVarName, varType, varvalue, true, errorMessage))
 			{
-				Log(LOG_ERROR, "MQTT: Error setting uservariable (%s)", errorMessage.c_str());
+				Log(LOG_ERROR, "Error setting uservariable (%s)", errorMessage.c_str());
 			}
 		}
 		else if (szCommand == "addlogmessage")
@@ -531,7 +550,7 @@ void MQTT::on_message(const struct mosquitto_message *message)
 			{
 				bfromnotification = root["bfromnotification"].asBool();
 			}
-			m_notifications.SendMessageEx(idx, name, subsystems, subject, body, extradata, priority, sound, bfromnotification);
+			m_notifications.SendMessageEx(idx, name, subsystems, std::string(""), subject, body, extradata, priority, sound, bfromnotification);
 		}
 		else if (szCommand == "getdeviceinfo")
 		{
@@ -544,17 +563,18 @@ void MQTT::on_message(const struct mosquitto_message *message)
 		}
 		else
 		{
-			Log(LOG_ERROR, "MQTT: Unknown command received: %s", szCommand.c_str());
+			Log(LOG_ERROR, "Unknown command received: %s", szCommand.c_str());
 			return;
 		}
 		return;
 	}
-	catch (const Json::LogicError &)
+	catch (const Json::LogicError &e)
 	{
+		Log(LOG_ERROR, "Exception: %s!", e.what());
 		goto mqttinvaliddata;
 	}
 mqttinvaliddata:
-	Log(LOG_ERROR, "MQTT: Invalid data received!");
+	Log(LOG_ERROR, "Invalid/Unhandled data received! (Topic: %s, Message: %s)", topic.c_str(), qMessage.c_str());
 }
 
 void MQTT::on_disconnect(int rc)
@@ -565,50 +585,88 @@ void MQTT::on_disconnect(int rc)
 		{
 			if (rc == 5)
 			{
-				Log(LOG_ERROR, "MQTT: disconnected, Invalid Username/Password (rc=%d)", rc);
+				Log(LOG_ERROR, "disconnected, Invalid Username/Password (rc=%d)", rc);
 			}
 			else
 			{
-				Log(LOG_ERROR, "MQTT: disconnected, restarting (rc=%d)", rc);
+				Log(LOG_ERROR, "disconnected, restarting (rc=%d/%s)", rc, mosquitto_strerror(rc));
 			}
+			m_subscribed_topics.clear();
 			m_bDoReconnect = true;
 		}
 	}
 }
 
+//called when hardware is stopped
+void MQTT::on_going_down()
+{
+}
+
+bool MQTT::ReconnectNow()
+{
+	disconnect();
+	ConnectIntEx();
+	return true;
+}
+
 bool MQTT::ConnectInt()
 {
+	if (m_szIPAddress.empty())
+		return false;
 	StopMQTT();
 	return ConnectIntEx();
 }
 
 bool MQTT::ConnectIntEx()
 {
+	if (m_szIPAddress.empty())
+		return false;
 	m_bDoReconnect = false;
-	Log(LOG_STATUS, "MQTT: Connecting to %s:%d", m_szIPAddress.c_str(), m_usIPPort);
+
+	std::string IPAddress(m_szIPAddress);
+	bool bIsSecure = (IPAddress.find("tls://") == 0);
+	if (bIsSecure)
+		IPAddress = IPAddress.substr(std::string("tls://").size());
+	else
+		bIsSecure = (m_usIPPort == 8883);
+
+	Log(LOG_STATUS, "Connecting to %s:%d", m_szIPAddress.c_str(), m_usIPPort);
 
 	int rc;
-	int keepalive = 40;
+	int keepalive = 120;
 
-	if (!m_CAFilename.empty())
+	if (
+		(bIsSecure)
+		|| (!m_CAFilename.empty())
+		)
 	{
 		rc = tls_opts_set(SSL_VERIFY_NONE, szTLSVersions[m_TLS_Version], nullptr);
-		rc = tls_set(m_CAFilename.c_str());
+		if (rc != MOSQ_ERR_SUCCESS)
+		{
+			Log(LOG_ERROR, "Failed enabling TLS mode (tls_opts_set(%d, %s), return code: %d)", SSL_VERIFY_NONE, szTLSVersions[m_TLS_Version], rc);
+			return false;
+		}
+		std::string ca_path = (!m_CAFilename.empty()) ? m_CAFilename : szCertFile;
+		rc = tls_set(ca_path.c_str());
+		if (rc != MOSQ_ERR_SUCCESS) {
+			Log(LOG_ERROR, "Failed enabling TLS mode (tls_set(%s), return code: %d)", ca_path.c_str(), rc);
+			return false;
+		}
 		rc = tls_insecure_set(true);
 
 		if (rc != MOSQ_ERR_SUCCESS)
 		{
-			Log(LOG_ERROR, "MQTT: Failed enabling TLS mode, return code: %d (CA certificate: '%s')", rc, m_CAFilename.c_str());
+			Log(LOG_ERROR, "Failed enabling TLS mode, (tls_insecure_set(%s), return code: %d)", "true", rc);
 			return false;
 		}
-		Log(LOG_STATUS, "MQTT: enabled TLS mode");
+		Log(LOG_STATUS, "enabled TLS mode");
 	}
 	rc = username_pw_set((!m_UserName.empty()) ? m_UserName.c_str() : nullptr, (!m_Password.empty()) ? m_Password.c_str() : nullptr);
 
-	rc = connect(m_szIPAddress.c_str(), m_usIPPort, keepalive);
+	rc = connect(IPAddress.c_str(), m_usIPPort, keepalive);
 	if (rc != MOSQ_ERR_SUCCESS)
 	{
-		Log(LOG_ERROR, "MQTT: Failed to start, return code: %d (Check IP/Port)", rc);
+		Log(LOG_ERROR, "Failed to start, return code: %d/%s (Check IP/Port)", rc, mosquitto_strerror(rc));
 		m_bDoReconnect = true;
 		return false;
 	}
@@ -620,6 +678,8 @@ void MQTT::Do_Work()
 	bool bFirstTime = true;
 	int msec_counter = 0;
 	int sec_counter = 0;
+
+	set_callbacks();
 
 	while (!IsStopRequested(100))
 	{
@@ -695,7 +755,7 @@ void MQTT::Do_Work()
 	if (m_sSwitchSceneConnection.connected())
 		m_sSwitchSceneConnection.disconnect();
 
-	Log(LOG_STATUS, "MQTT: Worker stopped...");
+	Log(LOG_STATUS, "Worker stopped...");
 }
 
 void MQTT::SendHeartbeat()
@@ -705,18 +765,25 @@ void MQTT::SendHeartbeat()
 
 void MQTT::SendMessage(const std::string &Topic, const std::string &Message)
 {
+	SendMessageEx(Topic, Message, QOS, m_bRetain);
+}
+
+void MQTT::SendMessageEx(const std::string& Topic, const std::string& Message, int qos, bool retain)
+{
+	if (!m_IsConnected)
+	{
+		Log(LOG_STATUS, "Not Connected, failed to send message: %s", Message.c_str());
+		return;
+	}
+	if (Topic.empty())
+		return;
 	try
 	{
-		if (!m_IsConnected)
-		{
-			Log(LOG_STATUS, "MQTT: Not Connected, failed to send message: %s", Message.c_str());
-			return;
-		}
-		publish(nullptr, Topic.c_str(), Message.size(), Message.c_str(), QOS, m_bRetain);
+		publish(nullptr, Topic.c_str(), static_cast<int>(Message.size()), Message.c_str(), qos, retain);
 	}
 	catch (...)
 	{
-		Log(LOG_ERROR, "MQTT: Failed to send message: %s", Message.c_str());
+		Log(LOG_ERROR, "Failed to send message: %s", Message.c_str());
 	}
 }
 
@@ -734,6 +801,9 @@ void MQTT::SendDeviceInfo(const int HwdID, const uint64_t DeviceRowIdx, const st
 	if (!m_IsConnected)
 		return;
 
+	if (m_TopicOut.empty())
+		return;
+
 	if (m_bPreventLoop && (DeviceRowIdx == m_LastUpdatedDeviceRowIdx))
 	{
 		// we should ignore this now
@@ -741,8 +811,18 @@ void MQTT::SendDeviceInfo(const int HwdID, const uint64_t DeviceRowIdx, const st
 		return;
 	}
 
+	std::lock_guard<std::mutex> l(m_mutex);
+	if (!m_shared_devices.empty())
+	{
+		auto itt = m_shared_devices.find(DeviceRowIdx);
+		if (itt == m_shared_devices.end())
+		{
+			return;
+		}
+	}
+
 	std::vector<std::vector<std::string>> result;
-	result = m_sql.safe_query("SELECT HardwareID, DeviceID, Unit, Name, [Type], SubType, nValue, sValue, SwitchType, SignalLevel, BatteryLevel, Options, Description, LastLevel, Color, LastUpdate "
+	result = m_sql.safe_query("SELECT HardwareID, OrgHardwareID, DeviceID, Unit, Name, [Type], SubType, nValue, sValue, SwitchType, SignalLevel, BatteryLevel, Options, Description, LastLevel, Color, LastUpdate "
 				  "FROM DeviceStatus WHERE (HardwareID==%d) AND (ID==%" PRIu64 ")",
 				  HwdID, DeviceRowIdx);
 	if (!result.empty())
@@ -750,6 +830,7 @@ void MQTT::SendDeviceInfo(const int HwdID, const uint64_t DeviceRowIdx, const st
 		int iIndex = 0;
 		std::vector<std::string> sd = result[0];
 		std::string hwid = sd[iIndex++];
+		std::string org_hwid = sd[iIndex++];
 		std::string did = sd[iIndex++];
 		int dunit = atoi(sd[iIndex++].c_str());
 		std::string name = sd[iIndex++];
@@ -770,6 +851,7 @@ void MQTT::SendDeviceInfo(const int HwdID, const uint64_t DeviceRowIdx, const st
 
 		root["idx"] = Json::Value::UInt64(DeviceRowIdx);
 		root["hwid"] = hwid;
+		root["org_hwid"] = hwid;
 
 		if ((dType == pTypeTEMP) || (dType == pTypeTEMP_BARO) || (dType == pTypeTEMP_HUM) || (dType == pTypeTEMP_HUM_BARO) || (dType == pTypeBARO) || (dType == pTypeHUM) ||
 		    (dType == pTypeWIND) || (dType == pTypeRAIN) || (dType == pTypeUV) || (dType == pTypeCURRENT) || (dType == pTypeCURRENTENERGY) || (dType == pTypeENERGY) ||
@@ -779,9 +861,8 @@ void MQTT::SendDeviceInfo(const int HwdID, const uint64_t DeviceRowIdx, const st
 			{
 				root["id"] = std_format("%04X", std::stoi(did));
 			}
-			catch (const std::exception &)
+			catch (const std::exception&)
 			{
-				//illegal ID here !? probably caused by a plugin/script that does not use numbers as 'ID' (which it should!)
 				root["id"] = did;
 			}
 		}
@@ -816,7 +897,11 @@ void MQTT::SendDeviceInfo(const int HwdID, const uint64_t DeviceRowIdx, const st
 		root["description"] = description;
 		root["LastUpdate"] = sLastUpdate;
 
-		if (switchType == STYPE_Dimmer)
+		if (
+			(switchType == STYPE_Dimmer)
+			|| (switchType == STYPE_BlindsPercentage)
+			|| (switchType == STYPE_BlindsPercentageWithStop)
+			)
 		{
 			root["Level"] = LastLevel;
 			if (dType == pTypeColorSwitch)
@@ -878,6 +963,12 @@ void MQTT::SendDeviceInfo(const int HwdID, const uint64_t DeviceRowIdx, const st
 
 void MQTT::SendSceneInfo(const uint64_t SceneIdx, const std::string & /*SceneName*/)
 {
+	if (!m_IsConnected)
+		return;
+
+	if (m_TopicOut.empty())
+		return;
+
 	if (m_bPreventLoop && (SceneIdx == m_LastUpdatedSceneRowIdx))
 	{
 		// we should ignore this now
@@ -930,18 +1021,138 @@ void MQTT::SendSceneInfo(const uint64_t SceneIdx, const std::string & /*SceneNam
 	else
 		root["Status"] = "Mixed";
 	root["Timers"] = (m_sql.HasSceneTimers(sd[0]) == true) ? "true" : "false";
-	/*
-		uint64_t camIDX = m_mainworker.m_cameras.IsDevSceneInCamera(1, sd[0]);
-		//root["UsedByCamera"] = (camIDX != 0) ? true : false;
-		if (camIDX != 0) {
-			std::stringstream scidx;
-			scidx << camIDX;
-			//root["CameraIdx"] = std::to_string(camIDX);
-		}
-	*/
+
 	std::string message = root.toStyledString();
 	if (m_publish_scheme & PT_out)
 	{
 		SendMessage(m_TopicOut, message);
 	}
 }
+
+void MQTT::SubscribeTopic(const std::string &szTopic, int qos)
+{
+	if (qos == -1)
+		qos = QOS;
+
+	if (szTopic.empty())
+		return;
+	if (m_subscribed_topics.find(szTopic) == m_subscribed_topics.end())
+	{
+		m_subscribed_topics[szTopic] = true;
+		subscribe(nullptr, szTopic.c_str(), qos);
+	}
+}
+
+void MQTT::ReloadSharedDevices()
+{
+	std::lock_guard<std::mutex> l(m_mutex);
+	m_shared_devices.clear();
+	auto result = m_sql.safe_query("SELECT DeviceRowID FROM SharedDevices WHERE (SharedUserID == %d)", 2000 + m_HwdID);
+	if (!result.empty())
+	{
+		for (const auto& sd : result)
+		{
+			m_shared_devices[std::stoull(sd[0])] = true;
+		}
+	}
+}
+
+//Webserver helpers
+namespace http {
+	namespace server {
+		//As the SharedDevices is also used for Users, we are going to add 2000 to the index so we can distinguish between the two
+		void CWebServer::Cmd_GetSharedMQTTDevices(WebEmSession& session, const request& req, Json::Value& root)
+		{
+			if (session.rights != 2)
+			{
+				session.reply_status = reply::forbidden;
+				return; // Only admin user allowed
+			}
+			std::string sidx = request::findValue(&req, "idx");
+			if (sidx.empty())
+				return;
+			int idx = atoi(sidx.c_str()) + 2000;
+			root["title"] = "GetSharedMQTTDevices";
+
+			auto result = m_sql.safe_query("SELECT DeviceRowID FROM SharedDevices WHERE (SharedUserID == %d)", idx);
+			if (!result.empty())
+			{
+				int ii = 0;
+				for (const auto& sd : result)
+				{
+					root["result"][ii]["DeviceRowIdx"] = sd[0];
+					ii++;
+				}
+			}
+			root["status"] = "OK";
+		}
+
+		void CWebServer::Cmd_SetSharedMQTTDevices(WebEmSession& session, const request& req, Json::Value& root)
+		{
+			if (session.rights != 2)
+			{
+				session.reply_status = reply::forbidden;
+				return; // Only admin user allowed
+			}
+			std::string sidx = request::findValue(&req, "idx");
+			if (sidx.empty())
+				return;
+			int idx = atoi(sidx.c_str()) + 2000;
+
+			std::string userdevices = CURLEncode::URLDecode(request::findValue(&req, "devices"));
+			root["title"] = "SetSharedMQTTDevices";
+			std::vector<std::string> strarray;
+			StringSplit(userdevices, ";", strarray);
+
+			// First make a backup of the favorite devices before deleting the devices, then add the (new) onces and restore favorites
+			m_sql.safe_query("UPDATE SharedDevices SET SharedUserID = 0 WHERE SharedUserID == %d and Favorite == 1", idx);
+			m_sql.safe_query("DELETE FROM SharedDevices WHERE SharedUserID == %d", idx);
+
+			int nDevices = static_cast<int>(strarray.size());
+			for (int ii = 0; ii < nDevices; ii++)
+			{
+				m_sql.safe_query("INSERT INTO SharedDevices (SharedUserID,DeviceRowID) VALUES (%d,'%q')", idx, strarray[ii].c_str());
+				m_sql.safe_query("UPDATE SharedDevices SET Favorite = 1 WHERE SharedUserid == %d AND DeviceRowID IN (SELECT DeviceRowID FROM SharedDevices WHERE SharedUserID == 0)", idx);
+			}
+			m_sql.safe_query("DELETE FROM SharedDevices WHERE SharedUserID == 0");
+
+			CDomoticzHardwareBase* pHardware = m_mainworker.GetHardware(idx - 2000);
+			if (pHardware != nullptr)
+			{
+				if (pHardware->HwdType == HTYPE_MQTT)
+				{
+					MQTT* pMTTHardware = dynamic_cast<MQTT*>(pHardware);
+					pMTTHardware->ReloadSharedDevices();
+				}
+			}
+			root["status"] = "OK";
+		}
+
+		void CWebServer::Cmd_ClearSharedMQTTDevices(WebEmSession& session, const request& req, Json::Value& root)
+		{
+			if (session.rights != 2)
+			{
+				session.reply_status = reply::forbidden;
+				return; // Only admin user allowed
+			}
+			std::string sidx = request::findValue(&req, "idx");
+			if (sidx.empty())
+				return;
+			int idx = atoi(sidx.c_str()) + 2000;
+			root["status"] = "OK";
+			root["title"] = "ClearSharedMQTTDevices";
+			m_sql.safe_query("DELETE FROM SharedDevices WHERE SharedUserID == %d", idx);
+			CDomoticzHardwareBase* pHardware = m_mainworker.GetHardware(idx - 2000);
+			if (pHardware != nullptr)
+			{
+				if (pHardware->HwdType == HTYPE_MQTT)
+				{
+					MQTT* pMTTHardware = dynamic_cast<MQTT*>(pHardware);
+					pMTTHardware->ReloadSharedDevices();
+				}
+			}
+		}
+	} // namespace server
+} // namespace http
+
+

@@ -44,7 +44,6 @@ History:
 #include "../main/Helper.h"
 #include "../main/Logger.h"
 #include "hardwaretypes.h"
-#include "../main/localtime_r.h"
 #include "../main/RFXtrx.h"
 #include "../main/SQLHelper.h"
 #include "../main/mainworker.h"
@@ -994,14 +993,12 @@ void CHarmonyHub::ProcessQueryResponse(std::string *szQueryResponse)
 		{
 			std::string resultString = "Activity list: {";
 
-			std::map<std::string, std::string>::iterator it = m_mapActivities.begin();
-			std::map<std::string, std::string>::iterator ite = m_mapActivities.end();
-			for (; it != ite; ++it)
+			for (auto &&activity : m_mapActivities)
 			{
 				resultString.append("\"");
-				resultString.append(it->second);
+				resultString.append(activity.second);
 				resultString.append("\":\"");
-				resultString.append(it->first);
+				resultString.append(activity.first);
 				resultString.append("\",");
 			}
 			resultString=resultString.substr(0, resultString.size()-1);

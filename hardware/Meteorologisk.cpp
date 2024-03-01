@@ -4,14 +4,11 @@
 #include "../main/Logger.h"
 #include "../httpclient/UrlEncode.h"
 #include "hardwaretypes.h"
-#include "../main/localtime_r.h"
 #include "../httpclient/HTTPClient.h"
 #include "../main/json_helper.h"
 #include "../main/RFXtrx.h"
 #include "../main/mainworker.h"
 #include "../main/SQLHelper.h"
-
-#define round(a) (int)(a + .5)
 
 #ifdef _DEBUG
 //#define DEBUG_MeteorologiskR
@@ -278,7 +275,7 @@ void CMeteorologisk::GetMeterDetails()
 
 	if (instantData["relative_humidity"].empty() == false)
 	{
-		humidity = round(instantData["relative_humidity"].asFloat());
+		humidity = ground(instantData["relative_humidity"].asFloat());
 	}
 	if (instantData["air_pressure_at_sea_level"].empty() == false)
 	{

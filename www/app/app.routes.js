@@ -60,6 +60,11 @@ define(['angularAMD', 'angular', 'angular-route'], function (angularAMD) {
                 controller: 'DPInfluxController',
                 permission: 'Admin'
             }))
+            .when('/DPMQTT', angularAMD.route({
+                templateUrl: 'views/dpmqtt.html',
+                controller: 'DPMQTTController',
+                permission: 'Admin'
+            }))
             .when('/DPGooglePubSub', angularAMD.route({
                 templateUrl: 'views/dpgooglepubsub.html',
                 controller: 'DPGooglePubSubController',
@@ -141,11 +146,6 @@ define(['angularAMD', 'angular', 'angular-route'], function (angularAMD) {
                 controller: 'RestoreDatabaseController',
                 permission: 'Admin'
             }))
-            .when('/RFXComFirmware', angularAMD.route({
-                templateUrl: 'views/rfxcomfirmware.html',
-                controller: 'RFXComFirmwareController',
-                permission: 'Admin'
-            }))
             .when('/Cam', angularAMD.route({
                 templateUrl: 'views/cam.html',
                 controller: 'CamController',
@@ -209,6 +209,11 @@ define(['angularAMD', 'angular', 'angular-route'], function (angularAMD) {
                 controller: 'UsersController',
                 permission: 'Admin'
             }))
+            .when('/Applications', angularAMD.route({
+                templateUrl: 'views/applications.html',
+                controller: 'ApplicationsController',
+                permission: 'Admin'
+            }))
             .when('/UserVariables', angularAMD.route({
                 templateUrl: 'views/uservariables.html',
                 controller: 'UserVariablesController',
@@ -233,6 +238,10 @@ define(['angularAMD', 'angular', 'angular-route'], function (angularAMD) {
                 controller: 'MobileNotificationsController',
                 permission: 'Admin'
             }))
+            .when('/MyProfile', angularAMD.route({
+                templateUrl: 'views/myprofile.html',
+                controller: 'MyProfileController'
+            }))
             .when('/About', angularAMD.route({
                 templateUrl: 'views/about.html',
                 controller: 'AboutController'
@@ -241,7 +250,8 @@ define(['angularAMD', 'angular', 'angular-route'], function (angularAMD) {
                     templateUrl: function (params) {
                         return 'templates/' + params.custompage + '.html';
                     },
-                    controller: 'DummyController'
+                    controller: 'DummyController',
+					permission: 'Viewer'
                 })
             )
             .otherwise({

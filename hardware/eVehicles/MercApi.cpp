@@ -32,8 +32,9 @@ License: Public domain
 // - Electric Vehicle status (even possible for non-electric/hybrid vehicles)
 // so use the following 5 scope's: mb:vehicle:mbdata:vehiclestatus mb:vehicle:mbdata:fuelstatus mb:vehicle:mbdata:payasyoudrive mb:vehicle:mbdata:vehiclelock mb:vehicle:mbdata:evstatus
 // and we need the additional scope to get a refresh token: offline_access
-#define MERC_URL_AUTH "https://id.mercedes-benz.com"
-#define MERC_API_TOKEN "/as/token.oauth2"
+// and the basic scope to identify it as an OIDC request: openid
+#define MERC_URL_AUTH "https://ssoalpha.dvb.corpinter.net"
+#define MERC_API_TOKEN "/v1/token"
 #define MERC_URL "https://api.mercedes-benz.com"
 #define MERC_API "/vehicledata/v2/vehicles"
 
@@ -95,7 +96,7 @@ CMercApi::CMercApi(const std::string &username, const std::string &password, con
 bool CMercApi::Login()
 {
 	bool bSuccess = false;
-	std::string szLastUpdate = TimeToString(nullptr, TF_DateTime);
+	std::string sLastUpdate = TimeToString(nullptr, TF_DateTime);
 
 	if (m_refreshtoken.empty() || m_refreshtoken == MERC_REFRESHTOKEN_CLEARED)
 	{
@@ -106,7 +107,7 @@ bool CMercApi::Login()
 		if (GetAuthToken(m_username, m_authtoken, false))
 		{
 			m_pBase->Log(LOG_NORM, "Login successful.");
-			m_sql.safe_query("UPDATE UserVariables SET Value='%q', LastUpdate='%q' WHERE (ID==%d)", m_refreshtoken.c_str(), szLastUpdate.c_str(), m_uservar_refreshtoken_idx);
+			m_sql.safe_query("UPDATE UserVariables SET Value='%q', LastUpdate='%q' WHERE (ID==%d)", m_refreshtoken.c_str(), sLastUpdate.c_str(), m_uservar_refreshtoken_idx);
 			bSuccess = true;
 		}
 		else
@@ -128,7 +129,7 @@ bool CMercApi::Login()
 bool CMercApi::RefreshLogin()
 {
 	bool bSuccess = false;
-	std::string szLastUpdate = TimeToString(nullptr, TF_DateTime);
+	std::string sLastUpdate = TimeToString(nullptr, TF_DateTime);
 
 	m_pBase->Debug(DEBUG_NORM, "Refreshing login credentials.");
 	m_authenticating = true;
@@ -149,7 +150,7 @@ bool CMercApi::RefreshLogin()
 	}
 
 	m_authenticating = false;
-	m_sql.safe_query("UPDATE UserVariables SET Value='%q', LastUpdate='%q' WHERE (ID==%d)", m_refreshtoken.c_str(), szLastUpdate.c_str(), m_uservar_refreshtoken_idx);
+	m_sql.safe_query("UPDATE UserVariables SET Value='%q', LastUpdate='%q' WHERE (ID==%d)", m_refreshtoken.c_str(), sLastUpdate.c_str(), m_uservar_refreshtoken_idx);
 
 	return bSuccess;
 }
@@ -711,7 +712,7 @@ bool CMercApi::GetAuthToken(const std::string &username, const std::string &pass
 		m_pBase->Log(LOG_ERROR, "No username specified.");
 		return false;
 	}
-	if (!refreshUsingToken && username.empty())
+	if (!refreshUsingToken && password.empty())
 	{
 		m_pBase->Log(LOG_ERROR, "No password specified.");
 		return false;
@@ -865,6 +866,10 @@ bool CMercApi::SendToApi(const eApiMethod eMethod, const std::string& sUrl, cons
 			m_pBase->Log(LOG_STATUS, "Received (Curl) returncode 28.. API request response took too long, timed-out!");
 			return false;
 			break;
+		case 35:
+			m_pBase->Log(LOG_STATUS, "Received (Curl) returncode 35.. Trouble with HTTPS/SSL! (%s)", _ssResponseHeaderString.str().c_str());
+			return false;
+			break;
 		case 200:
 			break; // Ok, continue to process content
 		case 204:
@@ -872,15 +877,18 @@ bool CMercApi::SendToApi(const eApiMethod eMethod, const std::string& sUrl, cons
 			return true; // OK and directly return as there is no content to actually process
 			break;
 		case 400:
+			m_pBase->Log(LOG_STATUS, "Received (400) Bad Request.. Unexpected unless something has changed! (%s)", sResponse.c_str());
+			return false;
+			break;
 		case 401:
 			if(!m_authenticating) 
 			{
-				m_pBase->Log(LOG_STATUS, "Received 400/401.. Let's try to (re)authorize again!");
+				m_pBase->Log(LOG_STATUS, "Received 401.. Let's try to (re)authorize again!");
 				RefreshLogin();
 			}
 			else
 			{
-				m_pBase->Log(LOG_STATUS, "Received 400/401.. During authorisation proces. Aborting!");
+				m_pBase->Log(LOG_STATUS, "Received 401.. During authorisation proces. Aborting!");
 			}			
 			return false;
 			break;

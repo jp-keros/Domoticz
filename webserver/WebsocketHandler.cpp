@@ -2,7 +2,6 @@
 #include "WebsocketHandler.h"
 
 #include <utility>
-#include "../main/localtime_r.h"
 #include "../main/mainworker.h"
 #include "../main/Helper.h"
 #include "../main/json_helper.h"
@@ -33,7 +32,7 @@ namespace http {
 			{
 				// WebSockets only do security during set up so keep pushing the expiry out to stop it being cleaned up
 				WebEmSession session;
-				std::map<std::string, WebEmSession>::iterator itt = myWebem->m_sessions.find(sessionid);
+				auto itt = myWebem->m_sessions.find(sessionid);
 				if (itt != myWebem->m_sessions.end())
 				{
 					session = itt->second;
@@ -47,7 +46,6 @@ namespace http {
 						session.timeout = nowAnd1Day;
 						session.expires = nowAnd1Day;
 						session.isnew = false;
-						session.forcelogin = false;
 						session.rememberme = false;
 						session.reply_status = 200;
 					}
@@ -177,7 +175,7 @@ namespace http {
 		{
 			try
 			{
-				std::string query = "type=devices&rid=" + std::to_string(DeviceRowIdx);
+				std::string query = "type=command&param=getdevices&rid=" + std::to_string(DeviceRowIdx);
 				Json::Value request;
 				request["event"] = "device_request";
 				request["requestid"] = -1;
@@ -195,7 +193,7 @@ namespace http {
 		{
 			try
 			{
-				std::string query = "type=scenes&rid=" + std::to_string(SceneRowIdx);
+				std::string query = "type=command&param=getscenes&rid=" + std::to_string(SceneRowIdx);
 				Json::Value request;
 				request["event"] = "scene_request";
 				request["requestid"] = -1;

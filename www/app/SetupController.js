@@ -245,6 +245,23 @@ define(['app'], function (app) {
 				}
 			});
 
+			//Get Languages
+			$.ajax({
+				url: "json.htm?type=command&param=getlanguages",
+				async: false,
+				dataType: 'json',
+				success: function (data) {
+					if (typeof data.result != 'undefined') {
+						$("#settingscontent #combolanguages").html("");
+						$.each(data.result, function (language, langcode) {
+							var option = $('<option />');
+							option.attr('value', langcode).text(language);
+							$("#settingscontent #combolanguages").append(option);
+						});
+					}
+				}
+			});
+
 			//Get Timer Plans
 			$.ajax({
 				url: "json.htm?type=command&param=gettimerplans",
@@ -263,7 +280,7 @@ define(['app'], function (app) {
 			});
 
 			$.ajax({
-				url: "json.htm?type=settings",
+				url: "json.htm?type=command&param=getsettings",
 				async: false,
 				dataType: 'json',
 				success: function (data) {
@@ -395,6 +412,9 @@ define(['app'], function (app) {
 					if (typeof data.ShortLogDays != 'undefined') {
 						$("#shortlogtable #comboshortlogdays").val(data.ShortLogDays);
 					}
+					if (typeof data.ShortLogAddOnlyNewValues != 'undefined') {
+						$("#shortlogtable #ShortLogAddOnlyNewValues").prop('checked', data.ShortLogAddOnlyNewValues == 1);
+					}
 					if (typeof data.ShortLogInterval != 'undefined') {
 						$("#shortlogtable #comboshortloginterval").val(data.ShortLogInterval);
 					}
@@ -407,11 +427,6 @@ define(['app'], function (app) {
 					if (typeof data.MobileType != 'undefined') {
 						$("#settingscontent #combosmobiletype").val(data.MobileType);
 					}
-					if (typeof data.WebUserName != 'undefined') {
-						$scope.OldAdminUser=data.WebUserName;
-						$("#webtable #WebUserName").val(data.WebUserName);
-					}
-					$("#webtable #WebPassword").val(md5.createHash("bogus"));
 					if (typeof data.SecPassword != 'undefined') {
 						$("#sectable #SecPassword").val(data.SecPassword);
 					}
@@ -520,27 +535,6 @@ define(['app'], function (app) {
 					if (typeof data.SmartMeterType != 'undefined') {
 						$("#p1metertable #comboP1MeterType").val(data.SmartMeterType);
 					}
-					if (typeof data.EnableTabFloorplans != 'undefined') {
-						$("#activemenustable #EnableTabFloorplans").prop('checked', data.EnableTabFloorplans == 1);
-					}
-					if (typeof data.EnableTabLights != 'undefined') {
-						$("#activemenustable #EnableTabLights").prop('checked', data.EnableTabLights == 1);
-					}
-					if (typeof data.EnableTabScenes != 'undefined') {
-						$("#activemenustable #EnableTabScenes").prop('checked', data.EnableTabScenes == 1);
-					}
-					if (typeof data.EnableTabTemp != 'undefined') {
-						$("#activemenustable #EnableTabTemp").prop('checked', data.EnableTabTemp == 1);
-					}
-					if (typeof data.EnableTabWeather != 'undefined') {
-						$("#activemenustable #EnableTabWeather").prop('checked', data.EnableTabWeather == 1);
-					}
-					if (typeof data.EnableTabUtility != 'undefined') {
-						$("#activemenustable #EnableTabUtility").prop('checked', data.EnableTabUtility == 1);
-					}
-					if (typeof data.EnableTabCustom != 'undefined') {
-						$("#activemenustable #EnableTabCustom").prop('checked', data.EnableTabCustom == 1);
-					}
 					if (typeof data.NotificationSensorInterval != 'undefined') {
 						$("#nitable #comboNotificationSensorInterval").val(data.NotificationSensorInterval);
 					}
@@ -551,7 +545,7 @@ define(['app'], function (app) {
 						$("#remotesharedtable #RemoteSharedPort").val(data.RemoteSharedPort);
 					}
 					if (typeof data.Language != 'undefined') {
-						$("#languagetable #combolanguage").val(data.Language);
+						$("#languagetable #combolanguages").val(data.Language);
 					}
 					if (typeof data.WebTheme != 'undefined') {
 						$("#settingscontent #combothemes").val(data.WebTheme);
@@ -565,8 +559,8 @@ define(['app'], function (app) {
 					document.title = sessionStorage.title;
 					$("#settingscontent #Title").val(sessionStorage.title);
 
-					if (typeof data.AuthenticationMethod != 'undefined') {
-						$("#webtable #comboauthmethod").val(data.AuthenticationMethod);
+					if (typeof data.AllowPlainBasicAuth != 'undefined') {
+						$("#webtable #AllowPlainBasicAuth").prop('checked', data.AllowPlainBasicAuth == 1);
 					}
 					if (typeof data.ReleaseChannel != 'undefined') {
 						$("#autoupdatetable #comboReleaseChannel").val(data.ReleaseChannel);
@@ -661,9 +655,6 @@ define(['app'], function (app) {
 					if (typeof data.IFTTTAPI != 'undefined') {
 						$("#ifttttable #IFTTTAPI").val(atob(data.IFTTTAPI));
 					}
-					if (typeof data.WebRemoteProxyIPs != 'undefined') {
-						$("#webproxytable #WebRemoteProxyIPs").val(data.WebRemoteProxyIPs);
-					}
 				}
 			});
 		}
@@ -679,23 +670,6 @@ define(['app'], function (app) {
 				return;
 			}
 			
-			var adminuser = $("#webtable #WebUserName").val();
-			var adminpwd = $("#webtable #WebPassword").val();
-			if (adminpwd == md5.createHash("bogus")) {
-				$("#webtable #WebPassword").val("");
-				adminpwd = "";
-			}
-			if ((adminuser!="")&&($scope.OldAdminUser!=adminuser)) {
-				if (adminpwd=="") {
-					ShowNotify($.t('Please enter a Admin password!'), 2000, true);
-					return;
-				}
-			}
-			if (adminpwd!="") {
-				$("#webtable #WebPassword").val(md5.createHash(adminpwd));
-			}
-						
-
 			var secpanel = $("#sectable #SecPassword").val();
 			var switchprotection = $("#protectiontable #ProtectionPassword").val();
 
@@ -733,7 +707,7 @@ define(['app'], function (app) {
 				}
 			}
 
-			$http.post('storesettings', new FormData(document.querySelector("#settings")), {
+			$http.post('json.htm?type=command&param=storesettings', new FormData(document.querySelector("#settings")), {
 				transformRequest: angular.identity,
 				headers: { 'Content-Type': undefined }
 			}).then(function successCallback(response) {
